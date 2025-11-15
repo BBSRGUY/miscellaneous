@@ -8,3 +8,5 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+blang_span = { path = "../blang_span" }
+serde = { version = "1.0", features = ["derive"] }
