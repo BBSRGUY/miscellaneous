@@ -8,3 +8,10 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+blang_ast = { path = "../blang_ast" }
+blang_span = { path = "../blang_span" }
+rustc-hash.workspace = true
+thiserror = "1.0"
+
+# [dev-dependencies]
+# blang_parser = { path = "../blang_parser" }  # Temporarily disabled due to parser hanging issues

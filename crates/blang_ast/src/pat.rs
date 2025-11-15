@@ -155,6 +155,47 @@ pub enum EnumVariantPat {
     Struct(Vec<FieldPat>),
 }
 
+impl std::fmt::Display for Pat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            PatKind::Literal(lit) => write!(f, "{:?}", lit),
+            PatKind::Ident(ident_pat) => write!(f, "{}", ident_pat.ident.name),
+            PatKind::Wildcard => write!(f, "_"),
+            PatKind::Rest => write!(f, ".."),
+            PatKind::Reference(ref_pat) => {
+                if ref_pat.mutable {
+                    write!(f, "&mut {}", ref_pat.pat)
+                } else {
+                    write!(f, "&{}", ref_pat.pat)
+                }
+            }
+            PatKind::Struct(struct_pat) => write!(f, "{}", struct_pat.path),
+            PatKind::Tuple(tuple_pat) => {
+                write!(f, "(")?;
+                for (i, elem) in tuple_pat.elems.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, ")")
+            }
+            PatKind::TupleStruct(ts_pat) => write!(f, "{}", ts_pat.path),
+            PatKind::Enum(enum_pat) => write!(f, "{}", enum_pat.path),
+            PatKind::Or(pats) => {
+                for (i, pat) in pats.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " | ")?;
+                    }
+                    write!(f, "{}", pat)?;
+                }
+                Ok(())
+            }
+            PatKind::Error => write!(f, "<error>"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

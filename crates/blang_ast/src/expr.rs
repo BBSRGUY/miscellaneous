@@ -457,6 +457,52 @@ pub struct ResourceExpr {
     pub loader: Expr,
 }
 
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOp::Add => write!(f, "+"),
+            BinaryOp::Sub => write!(f, "-"),
+            BinaryOp::Mul => write!(f, "*"),
+            BinaryOp::Div => write!(f, "/"),
+            BinaryOp::Rem => write!(f, "%"),
+            BinaryOp::Eq => write!(f, "=="),
+            BinaryOp::Ne => write!(f, "!="),
+            BinaryOp::Lt => write!(f, "<"),
+            BinaryOp::Le => write!(f, "<="),
+            BinaryOp::Gt => write!(f, ">"),
+            BinaryOp::Ge => write!(f, ">="),
+            BinaryOp::And => write!(f, "&&"),
+            BinaryOp::Or => write!(f, "||"),
+            BinaryOp::BitAnd => write!(f, "&"),
+            BinaryOp::BitOr => write!(f, "|"),
+            BinaryOp::BitXor => write!(f, "^"),
+            BinaryOp::Shl => write!(f, "<<"),
+            BinaryOp::Shr => write!(f, ">>"),
+            BinaryOp::Assign => write!(f, "="),
+            BinaryOp::AddAssign => write!(f, "+="),
+            BinaryOp::SubAssign => write!(f, "-="),
+            BinaryOp::MulAssign => write!(f, "*="),
+            BinaryOp::DivAssign => write!(f, "/="),
+            BinaryOp::RemAssign => write!(f, "%="),
+            BinaryOp::BitAndAssign => write!(f, "&="),
+            BinaryOp::BitOrAssign => write!(f, "|="),
+            BinaryOp::BitXorAssign => write!(f, "^="),
+            BinaryOp::ShlAssign => write!(f, "<<="),
+            BinaryOp::ShrAssign => write!(f, ">>="),
+        }
+    }
+}
+
+impl std::fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOp::Neg => write!(f, "-"),
+            UnaryOp::Not => write!(f, "!"),
+            UnaryOp::BitNot => write!(f, "~"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

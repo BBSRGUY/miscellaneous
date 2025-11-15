@@ -100,6 +100,12 @@ version = "0.1.0"
 [[package]]
 name = "blang_types"
 version = "0.1.0"
+dependencies = [
+ "blang_ast",
+ "blang_span",
+ "rustc-hash",
+ "thiserror",
+]
 
 [[package]]
 name = "console"
