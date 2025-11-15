@@ -111,6 +111,27 @@ impl IrType {
         matches!(self, IrType::F32 | IrType::F64)
     }
 
+    /// Check if this type is allowed in unsafe blocks
+    /// Only primitive numeric types, pointers, and unit are allowed
+    pub fn is_unsafe_block_allowed(&self) -> bool {
+        matches!(
+            self,
+            IrType::Unit
+                | IrType::Bool
+                | IrType::I8
+                | IrType::I16
+                | IrType::I32
+                | IrType::I64
+                | IrType::U8
+                | IrType::U16
+                | IrType::U32
+                | IrType::U64
+                | IrType::F32
+                | IrType::F64
+                | IrType::Ptr
+        )
+    }
+
     /// Get the size in bytes (simplified, assumes 64-bit target)
     pub fn size_bytes(&self) -> usize {
         match self {
@@ -528,6 +549,8 @@ pub struct Function {
     pub blocks: Vec<BasicBlock>,
     pub next_register: u32,
     pub next_block: u32,
+    /// Whether this function is an unsafe block (restricted to primitives/pointers)
+    pub is_unsafe_block: bool,
 }
 
 impl Function {
@@ -544,6 +567,25 @@ impl Function {
             blocks: Vec::new(),
             next_register,
             next_block: 0,
+            is_unsafe_block: false,
+        }
+    }
+
+    /// Create a new unsafe block function
+    pub fn new_unsafe_block(id: FunctionId, params: Vec<Parameter>, return_type: IrType) -> Self {
+        let next_register = params
+            .iter()
+            .map(|p| p.register.0 + 1)
+            .max()
+            .unwrap_or(0);
+        Self {
+            id,
+            params,
+            return_type,
+            blocks: Vec::new(),
+            next_register,
+            next_block: 0,
+            is_unsafe_block: true,
         }
     }
 

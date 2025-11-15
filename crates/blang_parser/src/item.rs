@@ -29,6 +29,22 @@ impl<'a> Parser<'a> {
             TokenKind::Use => self.parse_use(attrs)?,
             TokenKind::Component => self.parse_component(attrs)?,
             TokenKind::Script => self.parse_script(attrs)?,
+            TokenKind::Unsafe => {
+                // Check if this is "unsafe block" or just "unsafe fn"
+                self.stream.eat(TokenKind::Unsafe);  // consume 'unsafe'
+                if self.stream.at(TokenKind::Block) {
+                    self.parse_unsafe_block(attrs)?
+                } else if self.stream.at(TokenKind::Fn) {
+                    // This is "unsafe fn", parse as regular function with unsafe flag
+                    self.parse_function(attrs, public)?
+                } else {
+                    return Err(ParseError::unexpected_token(
+                        self.stream.peek_kind(),
+                        vec![TokenKind::Block, TokenKind::Fn],
+                        self.stream.current_span(),
+                    ));
+                }
+            }
             _ => {
                 return Err(ParseError::new(
                     ParseErrorKind::ExpectedItem,
@@ -139,6 +155,58 @@ impl<'a> Parser<'a> {
                 params,
                 return_ty,
             },
+            body,
+        }))
+    }
+
+    /// Parse an unsafe block declaration.
+    ///
+    /// Syntax: `unsafe block name(params) -> ret_ty { body }`
+    ///
+    /// Unsafe blocks have strict constraints:
+    /// - No generic parameters allowed
+    /// - Only primitive types and pointers allowed for params and return type
+    /// - Body is required (no forward declarations)
+    fn parse_unsafe_block(&mut self, attrs: Vec<Attr>) -> ParseResult<ItemKind> {
+        // 'unsafe' was already consumed in parse_item
+        self.stream.expect(TokenKind::Block).map_err(|_| {
+            ParseError::missing_token(TokenKind::Block, self.stream.current_span())
+        })?;
+
+        let name = self.parse_ident()?;
+
+        self.stream.expect(TokenKind::OpenParen).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenParen, self.stream.current_span())
+        })?;
+
+        let params = self.parse_params()?;
+
+        self.stream.expect(TokenKind::CloseParen).map_err(|_| {
+            ParseError::missing_token(TokenKind::CloseParen, self.stream.current_span())
+        })?;
+
+        let return_ty = if self.stream.eat(TokenKind::Arrow) {
+            Some(self.parse_ty()?)
+        } else {
+            None
+        };
+
+        // Body is required for unsafe blocks
+        if !self.stream.at(TokenKind::OpenBrace) {
+            return Err(ParseError::unexpected_token(
+                self.stream.peek_kind(),
+                vec![TokenKind::OpenBrace],
+                self.stream.current_span(),
+            ));
+        }
+
+        let body = self.parse_block()?;
+
+        Ok(ItemKind::UnsafeBlock(UnsafeBlockDecl {
+            attrs,
+            name,
+            params,
+            return_ty,
             body,
         }))
     }

@@ -68,6 +68,8 @@ pub enum TokenKind {
     Await,
     /// `break`
     Break,
+    /// `block`
+    Block,
     /// `case`
     Case,
     /// `catch`
@@ -335,6 +337,7 @@ impl TokenKind {
                 | TokenKind::Async
                 | TokenKind::Await
                 | TokenKind::Break
+                | TokenKind::Block
                 | TokenKind::Case
                 | TokenKind::Catch
                 | TokenKind::Component
@@ -427,6 +430,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Async => write!(f, "`async`"),
             TokenKind::Await => write!(f, "`await`"),
             TokenKind::Break => write!(f, "`break`"),
+            TokenKind::Block => write!(f, "`block`"),
             TokenKind::Case => write!(f, "`case`"),
             TokenKind::Catch => write!(f, "`catch`"),
             TokenKind::Component => write!(f, "`component`"),
@@ -553,6 +557,7 @@ pub fn str_to_keyword(s: &str) -> Option<TokenKind> {
         "async" => TokenKind::Async,
         "await" => TokenKind::Await,
         "break" => TokenKind::Break,
+        "block" => TokenKind::Block,
         "case" => TokenKind::Case,
         "catch" => TokenKind::Catch,
         "component" => TokenKind::Component,

@@ -5,7 +5,7 @@
 use crate::ir::*;
 use blang_ast::{
     BinaryOp as AstBinaryOp, Block, Expr, ExprKind, FunctionDecl, Item, ItemKind, Lit, Stmt,
-    StmtKind, UnaryOp as AstUnaryOp,
+    StmtKind, UnaryOp as AstUnaryOp, UnsafeBlockDecl,
 };
 use blang_types::{PrimitiveType, Type};
 use std::collections::HashMap;
@@ -21,6 +21,8 @@ pub enum LowerError {
     UndefinedVariable(String),
     #[error("Invalid constant: {0}")]
     InvalidConstant(String),
+    #[error("Unsafe block {block} uses disallowed type {ty}: only primitives and pointers are allowed")]
+    UnsafeBlockDisallowedType { block: String, ty: String },
 }
 
 pub type LowerResult<T> = Result<T, LowerError>;
@@ -115,6 +117,10 @@ impl IrLowerer {
                 let ir_func = self.lower_function(func)?;
                 self.module.add_function(ir_func);
             }
+            ItemKind::UnsafeBlock(unsafe_block) => {
+                let ir_func = self.lower_unsafe_block(unsafe_block)?;
+                self.module.add_function(ir_func);
+            }
             ItemKind::Const(const_decl) => {
                 // Lower constants as globals
                 let ty = convert_type(&Type::primitive(PrimitiveType::I32))?; // Placeholder
@@ -176,6 +182,62 @@ impl IrLowerer {
             // Empty function, just return
             ctx.set_terminator(Terminator::Return(None));
         }
+
+        Ok(ctx.function)
+    }
+
+    /// Lower an unsafe block declaration
+    fn lower_unsafe_block(&mut self, unsafe_block: &UnsafeBlockDecl) -> LowerResult<Function> {
+        let func_id = FunctionId(unsafe_block.name.name.clone());
+
+        // Convert parameter types and validate they're allowed in unsafe blocks
+        let mut params = Vec::new();
+        for (i, param) in unsafe_block.params.iter().enumerate() {
+            let ty = convert_type(&Type::primitive(PrimitiveType::I32))?; // Placeholder
+
+            // Validate type is allowed in unsafe blocks
+            if !ty.is_unsafe_block_allowed() {
+                return Err(LowerError::UnsafeBlockDisallowedType {
+                    block: unsafe_block.name.name.clone(),
+                    ty: format!("{:?}", ty),
+                });
+            }
+
+            params.push(Parameter {
+                name: param.pat.to_string(),
+                ty,
+                register: Register(i as u32),
+            });
+        }
+
+        // Convert return type and validate it's allowed
+        let return_type = if let Some(ref _ret_ty) = unsafe_block.return_ty {
+            let ty = convert_type(&Type::primitive(PrimitiveType::I32))?; // Placeholder
+
+            if !ty.is_unsafe_block_allowed() {
+                return Err(LowerError::UnsafeBlockDisallowedType {
+                    block: unsafe_block.name.name.clone(),
+                    ty: format!("{:?}", ty),
+                });
+            }
+
+            ty
+        } else {
+            IrType::Unit
+        };
+
+        let mut function = Function::new_unsafe_block(func_id, params.clone(), return_type);
+        let entry_block = function.new_block();
+
+        let mut ctx = LowerContext::new(function, entry_block);
+
+        // Bind parameters to registers
+        for param in &params {
+            ctx.bind_variable(param.name.clone(), param.register);
+        }
+
+        // Lower unsafe block body (body is always present for unsafe blocks)
+        self.lower_block(&mut ctx, &unsafe_block.body)?;
 
         Ok(ctx.function)
     }

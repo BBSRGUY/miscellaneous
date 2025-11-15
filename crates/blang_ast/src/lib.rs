@@ -70,7 +70,7 @@ pub use item::{
     FunctionSig, ImplDecl, ImplItem, Item, ItemKind, JobDecl, LifecycleHook, ModuleDecl, Param,
     PropDecl, ReceiverDecl, ScheduleOption, ScriptDecl, ScriptItem, StateDecl, StaticDecl,
     StepDecl, StepOption, StepOptionValue, StructBody, StructDecl, StructField, TraitDecl,
-    TraitItem, TupleField, TypeAliasDecl, UseDecl, UseTree, ViewContent,
+    TraitItem, TupleField, TypeAliasDecl, UnsafeBlockDecl, UseDecl, UseTree, ViewContent,
 };
 pub use lit::{BoolLit, CharLit, FloatLit, IntBase, IntLit, Lit, StrLit, TemplateLit, TemplatePart};
 pub use pat::{

@@ -67,6 +67,9 @@ pub enum ItemKind {
     /// An actor declaration
     Actor(ActorDecl),
 
+    /// An unsafe block declaration
+    UnsafeBlock(UnsafeBlockDecl),
+
     /// An item that couldn't be parsed (error recovery)
     Error,
 }
@@ -572,6 +575,27 @@ pub struct ReceiverDecl {
     /// Return type (None for unit return).
     pub return_ty: Option<Ty>,
     /// The receiver body.
+    pub body: Block,
+}
+
+/// An unsafe block declaration.
+///
+/// Unsafe blocks are low-level performance primitives with strict constraints:
+/// - Only primitive numeric types and pointers allowed as parameters and locals
+/// - No access to DOM, signals, jobs, or high-level runtime APIs
+/// - No panics allowed; errors must be represented as return codes or result structs
+/// - Compiled directly to efficient WASM without high-level runtime overhead
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct UnsafeBlockDecl {
+    /// Attributes on this unsafe block.
+    pub attrs: Vec<Attr>,
+    /// The block name.
+    pub name: Ident,
+    /// Block parameters (must be primitive or pointer types).
+    pub params: Vec<Param>,
+    /// Return type (must be primitive, pointer, or unit).
+    pub return_ty: Option<Ty>,
+    /// The block body.
     pub body: Block,
 }
 
