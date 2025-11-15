@@ -1,0 +1,398 @@
+// Data Sync Pipeline - Script Mode Example
+//
+// This example demonstrates:
+// - Script mode syntax
+// - Job orchestration
+// - Parallel execution
+// - Dependencies
+// - Error handling
+// - Data flow
+
+// Configuration for API endpoints
+const USERS_API: str = "https://api.example.com/users";
+const ORDERS_API: str = "https://api.example.com/orders";
+const PRODUCTS_API: str = "https://api.example.com/products";
+
+// Data structures
+struct User {
+    id: i32,
+    name: str,
+    email: str,
+    created_at: str,
+}
+
+struct Order {
+    id: i32,
+    user_id: i32,
+    product_id: i32,
+    quantity: i32,
+    total: f64,
+    order_date: str,
+}
+
+struct Product {
+    id: i32,
+    name: str,
+    price: f64,
+    category: str,
+}
+
+struct EnrichedOrder {
+    order_id: i32,
+    user_name: str,
+    user_email: str,
+    product_name: str,
+    product_category: str,
+    quantity: i32,
+    total: f64,
+    order_date: str,
+}
+
+// Helper functions
+fn is_valid_user(user: User) -> bool {
+    !user.email.is_empty() && user.id > 0
+}
+
+fn is_valid_order(order: Order) -> bool {
+    order.id > 0 && order.user_id > 0 && order.product_id > 0
+}
+
+fn is_valid_product(product: Product) -> bool {
+    product.id > 0 && !product.name.is_empty()
+}
+
+fn enrich_order(order: Order, users: &[User], products: &[Product]) -> Option<EnrichedOrder> {
+    let user = users.iter().find(|u| u.id == order.user_id)?;
+    let product = products.iter().find(|p| p.id == order.product_id)?;
+
+    Some(EnrichedOrder {
+        order_id: order.id,
+        user_name: user.name.clone(),
+        user_email: user.email.clone(),
+        product_name: product.name.clone(),
+        product_category: product.category.clone(),
+        quantity: order.quantity,
+        total: order.total,
+        order_date: order.order_date.clone(),
+    })
+}
+
+// Main data synchronization pipeline
+script DataSync {
+    // Global configuration
+    config {
+        // Maximum parallel jobs
+        max_parallel: 4,
+
+        // Global timeout
+        timeout: 300s,
+
+        // Error handling
+        on_error: "continue",
+        max_retries: 3,
+        retry_delay: 2s,
+
+        // Logging
+        log_level: "info",
+    }
+
+    // Job 1: Extract data from multiple sources in parallel
+    job extract {
+        // Fetch users from API
+        step fetch_users {
+            retry: 5,
+            retry_delay: 2s,
+            retry_backoff: "exponential",
+            timeout: 30s,
+
+            try {
+                log.info("Fetching users from API...");
+                let response = http.get(USERS_API);
+
+                if response.status != 200 {
+                    return Err("Failed to fetch users: HTTP " + response.status.to_string());
+                }
+
+                let users: Vec<User> = json.parse(response.body);
+                log.info("Fetched " + users.len().to_string() + " users");
+
+                return Ok(users);
+            } catch (HttpError e) {
+                log.error("HTTP error fetching users: " + e.message);
+                return Err(e.message);
+            } catch (ParseError e) {
+                log.error("Parse error: " + e.message);
+                return Err(e.message);
+            }
+        }
+
+        // Fetch orders from API (runs in parallel with fetch_users)
+        step fetch_orders {
+            retry: 5,
+            retry_delay: 2s,
+            retry_backoff: "exponential",
+            timeout: 30s,
+
+            try {
+                log.info("Fetching orders from API...");
+                let response = http.get(ORDERS_API);
+
+                if response.status != 200 {
+                    return Err("Failed to fetch orders: HTTP " + response.status.to_string());
+                }
+
+                let orders: Vec<Order> = json.parse(response.body);
+                log.info("Fetched " + orders.len().to_string() + " orders");
+
+                return Ok(orders);
+            } catch (HttpError e) {
+                log.error("HTTP error fetching orders: " + e.message);
+                return Err(e.message);
+            }
+        }
+
+        // Fetch products from API (runs in parallel)
+        step fetch_products {
+            retry: 5,
+            retry_delay: 2s,
+            retry_backoff: "exponential",
+            timeout: 30s,
+
+            try {
+                log.info("Fetching products from API...");
+                let response = http.get(PRODUCTS_API);
+
+                if response.status != 200 {
+                    return Err("Failed to fetch products: HTTP " + response.status.to_string());
+                }
+
+                let products: Vec<Product> = json.parse(response.body);
+                log.info("Fetched " + products.len().to_string() + " products");
+
+                return Ok(products);
+            } catch (HttpError e) {
+                log.error("HTTP error fetching products: " + e.message);
+                return Err(e.message);
+            }
+        }
+
+        // Log extraction completion
+        step log_extraction {
+            log.info("Extraction phase complete");
+            log.info("  Users: " + fetch_users.result.len().to_string());
+            log.info("  Orders: " + fetch_orders.result.len().to_string());
+            log.info("  Products: " + fetch_products.result.len().to_string());
+        }
+    }
+
+    // Job 2: Transform and enrich data
+    job transform depends_on(extract) {
+        config {
+            timeout: 120s,
+        }
+
+        // Validate extracted data
+        step validate {
+            timeout: 30s,
+
+            log.info("Validating data...");
+
+            let users = extract.fetch_users.result;
+            let orders = extract.fetch_orders.result;
+            let products = extract.fetch_products.result;
+
+            let valid_users = users.filter(is_valid_user);
+            let valid_orders = orders.filter(is_valid_order);
+            let valid_products = products.filter(is_valid_product);
+
+            let invalid_count =
+                (users.len() - valid_users.len()) +
+                (orders.len() - valid_orders.len()) +
+                (products.len() - valid_products.len());
+
+            if invalid_count > 0 {
+                log.warn("Found " + invalid_count.to_string() + " invalid records");
+            }
+
+            log.info("Validation complete");
+
+            return {
+                users: valid_users,
+                orders: valid_orders,
+                products: valid_products,
+            };
+        }
+
+        // Enrich orders with user and product information
+        step enrich {
+            timeout: 60s,
+
+            log.info("Enriching orders...");
+
+            let validated = validate.result;
+            let users = validated.users;
+            let orders = validated.orders;
+            let products = validated.products;
+
+            let mut enriched_orders: Vec<EnrichedOrder> = vec![];
+
+            for order in orders {
+                if let Some(enriched) = enrich_order(order, &users, &products) {
+                    enriched_orders.push(enriched);
+                } else {
+                    log.warn("Could not enrich order " + order.id.to_string());
+                }
+            }
+
+            log.info("Enriched " + enriched_orders.len().to_string() + " orders");
+
+            return enriched_orders;
+        }
+
+        // Calculate statistics
+        step calculate_stats {
+            let enriched = enrich.result;
+
+            let total_revenue = enriched.iter()
+                .map(|o| o.total)
+                .sum();
+
+            let total_items = enriched.iter()
+                .map(|o| o.quantity)
+                .sum();
+
+            log.info("Statistics:");
+            log.info("  Total orders: " + enriched.len().to_string());
+            log.info("  Total revenue: $" + total_revenue.to_string());
+            log.info("  Total items: " + total_items.to_string());
+
+            return {
+                order_count: enriched.len(),
+                total_revenue: total_revenue,
+                total_items: total_items,
+            };
+        }
+    }
+
+    // Job 3: Load data to destinations
+    job load depends_on(transform) {
+        config {
+            timeout: 90s,
+        }
+
+        // Save to data warehouse (parallel with cache update)
+        parallel {
+            step save_to_warehouse {
+                retry: 3,
+                timeout: 60s,
+
+                let enriched_orders = transform.enrich.result;
+
+                if enriched_orders.is_empty() {
+                    log.warn("No data to save to warehouse");
+                    return Ok(());
+                }
+
+                try {
+                    log.info("Saving to data warehouse...");
+
+                    // Batch insert to warehouse
+                    warehouse.batch_insert("enriched_orders", enriched_orders);
+
+                    log.info("Successfully saved " + enriched_orders.len().to_string() + " records to warehouse");
+
+                    return Ok(());
+                } catch (DatabaseError e) {
+                    log.error("Database error: " + e.message);
+                    return Err(e.message);
+                }
+            }
+
+            step update_cache {
+                retry: 3,
+                timeout: 30s,
+
+                let stats = transform.calculate_stats.result;
+
+                try {
+                    log.info("Updating cache...");
+
+                    cache.set("sync_stats", stats, 3600);  // Cache for 1 hour
+                    cache.set("last_sync_time", now(), 3600);
+
+                    log.info("Cache updated successfully");
+
+                    return Ok(());
+                } catch (CacheError e) {
+                    log.error("Cache error: " + e.message);
+                    return Err(e.message);
+                }
+            }
+        }
+
+        // Send notifications after warehouse and cache updates complete
+        step notify {
+            retry: 2,
+            timeout: 15s,
+            on_error: "continue",  // Don't fail the pipeline if notifications fail
+
+            let stats = transform.calculate_stats.result;
+
+            try {
+                log.info("Sending notifications...");
+
+                let message = format!(
+                    "Data sync complete. Processed {} orders, ${} revenue",
+                    stats.order_count,
+                    stats.total_revenue
+                );
+
+                // Send notification (webhook, email, etc.)
+                http.post("https://hooks.example.com/notify", {
+                    event: "data_sync_complete",
+                    message: message,
+                    stats: stats,
+                });
+
+                log.info("Notifications sent");
+
+                return Ok(());
+            } catch (HttpError e) {
+                log.warn("Failed to send notifications: " + e.message);
+                return Err(e.message);
+            }
+        }
+
+        // Log completion
+        step log_completion {
+            let stats = transform.calculate_stats.result;
+
+            log.info("=================================");
+            log.info("Data Sync Pipeline Complete!");
+            log.info("=================================");
+            log.info("Orders processed: " + stats.order_count.to_string());
+            log.info("Total revenue: $" + stats.total_revenue.to_string());
+            log.info("Total items: " + stats.total_items.to_string());
+            log.info("=================================");
+        }
+    }
+}
+
+// Entry point
+fn main() {
+    log.info("Starting Data Sync Pipeline...");
+
+    let start_time = now();
+
+    // Run the pipeline
+    let result = DataSync.run();
+
+    let duration = now() - start_time;
+
+    if result.is_ok() {
+        log.info("Pipeline completed successfully in " + duration.to_string() + "s");
+    } else {
+        log.error("Pipeline failed: " + result.err().unwrap());
+        exit(1);
+    }
+}

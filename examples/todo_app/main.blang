@@ -1,0 +1,486 @@
+// Todo App - Full-featured todo list application
+//
+// This example demonstrates:
+// - Component composition
+// - Complex state management
+// - List rendering
+// - Form handling
+// - Filtering and computed values
+// - Props and callbacks
+
+// Data structure for a todo item
+struct Todo {
+    id: i32,
+    text: str,
+    completed: bool,
+}
+
+// Individual todo item component
+component TodoItem {
+    props {
+        todo: Todo,
+        on_toggle: fn(i32),
+        on_delete: fn(i32),
+    }
+
+    state is_editing: bool = false;
+    state edit_text: str = "";
+
+    fn start_edit() {
+        is_editing = true;
+        edit_text = todo.text.clone();
+    }
+
+    fn cancel_edit() {
+        is_editing = false;
+        edit_text = "";
+    }
+
+    fn save_edit() {
+        if !edit_text.is_empty() {
+            // In a real app, this would call a parent callback
+            // For now, we just cancel the edit
+            is_editing = false;
+        }
+    }
+
+    fn handle_key_down(e: KeyEvent) {
+        if e.key == "Enter" {
+            save_edit();
+        } else if e.key == "Escape" {
+            cancel_edit();
+        }
+    }
+
+    view {
+        <li class={if todo.completed { "todo-item completed" } else { "todo-item" }}>
+            {if is_editing {
+                <div class="edit-mode">
+                    <input
+                        type="text"
+                        class="edit-input"
+                        value={edit_text}
+                        on:input={|e| edit_text = e.target.value}
+                        on:keydown={handle_key_down}
+                        on:blur={cancel_edit}
+                    />
+                </div>
+            } else {
+                <div class="view-mode">
+                    <input
+                        type="checkbox"
+                        class="toggle"
+                        checked={todo.completed}
+                        on:change={|| on_toggle(todo.id)}
+                    />
+
+                    <label class="todo-text" on:dblclick={start_edit}>
+                        {todo.text}
+                    </label>
+
+                    <button class="delete-btn" on:click={|| on_delete(todo.id)}>
+                        "×"
+                    </button>
+                </div>
+            }}
+        </li>
+    }
+
+    style {
+        .todo-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            transition: background 0.2s;
+        }
+
+        .todo-item:hover {
+            background: #f9fafb;
+        }
+
+        .todo-item.completed .todo-text {
+            text-decoration: line-through;
+            color: #9ca3af;
+        }
+
+        .view-mode {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 1rem;
+        }
+
+        .toggle {
+            width: 1.25rem;
+            height: 1.25rem;
+            cursor: pointer;
+        }
+
+        .todo-text {
+            flex: 1;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .delete-btn {
+            padding: 0.25rem 0.75rem;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1.5rem;
+            line-height: 1;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .todo-item:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .delete-btn:hover {
+            background: #dc2626;
+        }
+
+        .edit-mode {
+            width: 100%;
+        }
+
+        .edit-input {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1rem;
+            border: 2px solid #3b82f6;
+            border-radius: 4px;
+            outline: none;
+        }
+    }
+}
+
+// Main todo application component
+component TodoApp {
+    // State
+    state todos: Vec<Todo> = vec![];
+    state new_todo_text: str = "";
+    state filter: str = "all";
+    state next_id: i32 = 1;
+
+    // Lifecycle
+    on_mount() {
+        // In a real app, load from localStorage
+        println("Todo app mounted");
+    }
+
+    // Methods
+    fn add_todo() {
+        if !new_todo_text.is_empty() {
+            todos.push(Todo {
+                id: next_id,
+                text: new_todo_text.clone(),
+                completed: false,
+            });
+            next_id = next_id + 1;
+            new_todo_text = "";
+        }
+    }
+
+    fn toggle_todo(id: i32) {
+        for todo in &mut todos {
+            if todo.id == id {
+                todo.completed = !todo.completed;
+                break;
+            }
+        }
+    }
+
+    fn delete_todo(id: i32) {
+        todos = todos.iter().filter(|t| t.id != id).collect();
+    }
+
+    fn clear_completed() {
+        todos = todos.iter().filter(|t| !t.completed).collect();
+    }
+
+    fn set_filter(new_filter: str) {
+        filter = new_filter;
+    }
+
+    fn handle_input(e: InputEvent) {
+        new_todo_text = e.target.value;
+    }
+
+    fn handle_key_down(e: KeyEvent) {
+        if e.key == "Enter" {
+            add_todo();
+        }
+    }
+
+    // Computed values
+    fn filtered_todos() -> Vec<Todo> {
+        match filter {
+            "active" => todos.iter().filter(|t| !t.completed).collect(),
+            "completed" => todos.iter().filter(|t| t.completed).collect(),
+            _ => todos.clone(),
+        }
+    }
+
+    fn active_count() -> i32 {
+        todos.iter().filter(|t| !t.completed).count()
+    }
+
+    fn completed_count() -> i32 {
+        todos.iter().filter(|t| t.completed).count()
+    }
+
+    fn has_completed() -> bool {
+        completed_count() > 0
+    }
+
+    // View
+    view {
+        <div class="todo-app">
+            <header class="app-header">
+                <h1>"Todo App"</h1>
+                <p class="subtitle">"A Blang Component Mode Example"</p>
+            </header>
+
+            <div class="add-todo">
+                <input
+                    type="text"
+                    class="new-todo-input"
+                    placeholder="What needs to be done?"
+                    value={new_todo_text}
+                    on:input={handle_input}
+                    on:keydown={handle_key_down}
+                />
+                <button class="add-btn" on:click={add_todo}>
+                    "Add"
+                </button>
+            </div>
+
+            {if !todos.is_empty() {
+                <>
+                    <div class="filters">
+                        <button
+                            class={if filter == "all" { "filter-btn active" } else { "filter-btn" }}
+                            on:click={|| set_filter("all")}
+                        >
+                            "All (" {todos.len()} ")"
+                        </button>
+
+                        <button
+                            class={if filter == "active" { "filter-btn active" } else { "filter-btn" }}
+                            on:click={|| set_filter("active")}
+                        >
+                            "Active (" {active_count()} ")"
+                        </button>
+
+                        <button
+                            class={if filter == "completed" { "filter-btn active" } else { "filter-btn" }}
+                            on:click={|| set_filter("completed")}
+                        >
+                            "Completed (" {completed_count()} ")"
+                        </button>
+                    </div>
+
+                    <ul class="todo-list">
+                        {for todo in filtered_todos() {
+                            <TodoItem
+                                todo={todo}
+                                on_toggle={toggle_todo}
+                                on_delete={delete_todo}
+                            />
+                        }}
+                    </ul>
+
+                    <footer class="app-footer">
+                        <span class="todo-count">
+                            {active_count()} " " {if active_count() == 1 { "item" } else { "items" }} " left"
+                        </span>
+
+                        {if has_completed() {
+                            <button class="clear-completed" on:click={clear_completed}>
+                                "Clear completed"
+                            </button>
+                        }}
+                    </footer>
+                </>
+            } else {
+                <div class="empty-state">
+                    <p class="empty-icon">"📝"</p>
+                    <p class="empty-text">"No todos yet!"</p>
+                    <p class="empty-hint">"Add your first todo above"</p>
+                </div>
+            }}
+        </div>
+    }
+
+    // Styles
+    style {
+        .todo-app {
+            max-width: 600px;
+            margin: 2rem auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .app-header {
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .app-header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            margin: 0.5rem 0 0 0;
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        .add-todo {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1.5rem;
+            background: #f9fafb;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .new-todo-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .new-todo-input:focus {
+            border-color: #667eea;
+        }
+
+        .add-btn {
+            padding: 0.75rem 2rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .add-btn:hover {
+            background: #5568d3;
+        }
+
+        .filters {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1rem 1.5rem;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .filter-btn {
+            flex: 1;
+            padding: 0.5rem 1rem;
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        .todo-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .app-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .todo-count {
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        .clear-completed {
+            padding: 0.5rem 1rem;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .clear-completed:hover {
+            background: #dc2626;
+        }
+
+        .empty-state {
+            padding: 4rem 2rem;
+            text-align: center;
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin: 0 0 1rem 0;
+        }
+
+        .empty-text {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .empty-hint {
+            margin: 0;
+            color: #9ca3af;
+        }
+    }
+}
+
+// Entry point
+fn main() {
+    let app = TodoApp {};
+    mount(app, "app");
+}
