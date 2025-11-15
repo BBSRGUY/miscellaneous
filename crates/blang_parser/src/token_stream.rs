@@ -34,9 +34,15 @@ impl<'a> TokenStream<'a> {
 
     /// Peek at a token N positions ahead without consuming.
     pub fn lookahead(&mut self, n: usize) -> &Token {
-        // Fill buffer if needed
+        // Fill buffer if needed, skipping whitespace tokens
         while self.buffer.len() <= self.pos + n {
-            let token = self.lexer.next_token();
+            let mut token = self.lexer.next_token();
+
+            // Skip whitespace tokens
+            while matches!(token.kind, TokenKind::Whitespace) {
+                token = self.lexer.next_token();
+            }
+
             self.buffer.push(token);
         }
 
