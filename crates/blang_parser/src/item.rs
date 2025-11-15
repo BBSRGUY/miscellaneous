@@ -601,7 +601,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    /// Parse a component declaration (simplified).
+    /// Parse a component declaration.
     fn parse_component(&mut self, attrs: Vec<Attr>) -> ParseResult<ItemKind> {
         self.stream.expect(TokenKind::Component).map_err(|_| {
             ParseError::missing_token(TokenKind::Component, self.stream.current_span())
@@ -614,7 +614,13 @@ impl<'a> Parser<'a> {
             ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
         })?;
 
-        let items = Vec::new(); // Simplified
+        let mut items = Vec::new();
+
+        // Parse component items (state, view, style, etc.)
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let item = self.parse_component_item()?;
+            items.push(item);
+        }
 
         self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
             ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
@@ -626,6 +632,182 @@ impl<'a> Parser<'a> {
             generic_params,
             items,
         }))
+    }
+
+    /// Parse a component item (state, view, style, etc.).
+    fn parse_component_item(&mut self) -> ParseResult<ComponentItem> {
+        match self.stream.peek().kind {
+            TokenKind::State => self.parse_component_state(),
+            TokenKind::View => self.parse_component_view(),
+            TokenKind::Style => self.parse_component_style(),
+            TokenKind::Props => self.parse_component_props(),
+            TokenKind::Fn => {
+                let func = self.parse_function(Vec::new(), false)?;
+                if let ItemKind::Function(decl) = func {
+                    Ok(ComponentItem::Function(decl))
+                } else {
+                    Err(ParseError::new(
+                        ParseErrorKind::InvalidLiteral {
+                            message: "expected function".to_string(),
+                        },
+                        self.stream.current_span(),
+                    ))
+                }
+            }
+            _ => Err(ParseError::new(
+                ParseErrorKind::InvalidLiteral {
+                    message: "expected component item (state, view, style, props, or fn)".to_string(),
+                },
+                self.stream.current_span(),
+            )),
+        }
+    }
+
+    /// Parse component state block.
+    fn parse_component_state(&mut self) -> ParseResult<ComponentItem> {
+        self.stream.expect(TokenKind::State).map_err(|_| {
+            ParseError::missing_token(TokenKind::State, self.stream.current_span())
+        })?;
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        let mut state_decls = Vec::new();
+
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let name = self.parse_ident()?;
+            self.stream.expect(TokenKind::Colon).map_err(|_| {
+                ParseError::missing_token(TokenKind::Colon, self.stream.current_span())
+            })?;
+            let ty = self.parse_ty()?;
+
+            let init = if self.stream.eat(TokenKind::Eq) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+
+            self.stream.eat(TokenKind::Semi);
+
+            state_decls.push(StateDecl { name, ty, init });
+        }
+
+        self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
+        })?;
+        Ok(ComponentItem::State(state_decls))
+    }
+
+    /// Parse component view block.
+    fn parse_component_view(&mut self) -> ParseResult<ComponentItem> {
+        self.stream.expect(TokenKind::View).map_err(|_| {
+            ParseError::missing_token(TokenKind::View, self.stream.current_span())
+        })?;
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        let start_span = self.stream.current_span();
+
+        // For now, we'll just consume everything until the matching close brace
+        // In a more complete implementation, we'd parse the view DSL properly
+        let mut content = String::new();
+        let mut brace_depth = 1;
+
+        while brace_depth > 0 && !self.stream.at_eof() {
+            let token = self.stream.next();
+            match token.kind {
+                TokenKind::OpenBrace => {
+                    brace_depth += 1;
+                    content.push('{');
+                }
+                TokenKind::CloseBrace => {
+                    brace_depth -= 1;
+                    if brace_depth > 0 {
+                        content.push('}');
+                    }
+                }
+                _ => {
+                    // Append token text to content
+                    content.push_str(&format!("{:?} ", token.kind));
+                }
+            }
+        }
+
+        Ok(ComponentItem::View(ViewContent {
+            content: content.trim().to_string(),
+            span: start_span,
+        }))
+    }
+
+    /// Parse component style block.
+    fn parse_component_style(&mut self) -> ParseResult<ComponentItem> {
+        self.stream.expect(TokenKind::Style).map_err(|_| {
+            ParseError::missing_token(TokenKind::Style, self.stream.current_span())
+        })?;
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        // For now, consume everything as a string until close brace
+        let mut content = String::new();
+        let mut brace_depth = 1;
+
+        while brace_depth > 0 && !self.stream.at_eof() {
+            let token = self.stream.next();
+            match token.kind {
+                TokenKind::OpenBrace => {
+                    brace_depth += 1;
+                    content.push('{');
+                }
+                TokenKind::CloseBrace => {
+                    brace_depth -= 1;
+                    if brace_depth > 0 {
+                        content.push('}');
+                    }
+                }
+                _ => {
+                    content.push_str(&format!("{:?} ", token.kind));
+                }
+            }
+        }
+
+        Ok(ComponentItem::Style(content.trim().to_string()))
+    }
+
+    /// Parse component props block.
+    fn parse_component_props(&mut self) -> ParseResult<ComponentItem> {
+        self.stream.expect(TokenKind::Props).map_err(|_| {
+            ParseError::missing_token(TokenKind::Props, self.stream.current_span())
+        })?;
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        let mut prop_decls = Vec::new();
+
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let name = self.parse_ident()?;
+            self.stream.expect(TokenKind::Colon).map_err(|_| {
+                ParseError::missing_token(TokenKind::Colon, self.stream.current_span())
+            })?;
+            let ty = self.parse_ty()?;
+
+            let default = if self.stream.eat(TokenKind::Eq) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+
+            self.stream.eat(TokenKind::Semi);
+
+            prop_decls.push(PropDecl { name, ty, default });
+        }
+
+        self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
+        })?;
+        Ok(ComponentItem::Props(prop_decls))
     }
 
     /// Parse a script declaration (simplified).
