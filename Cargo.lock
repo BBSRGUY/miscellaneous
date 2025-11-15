@@ -49,6 +49,13 @@ version = "0.1.0"
 [[package]]
 name = "blang_ir"
 version = "0.1.0"
+dependencies = [
+ "blang_ast",
+ "blang_span",
+ "blang_types",
+ "rustc-hash",
+ "thiserror",
+]
 
 [[package]]
 name = "blang_lexer"

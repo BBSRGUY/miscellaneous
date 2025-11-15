@@ -8,3 +8,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+blang_ast = { path = "../blang_ast" }
+blang_span = { path = "../blang_span" }
+blang_types = { path = "../blang_types" }
+rustc-hash.workspace = true
+thiserror = "1.0"
