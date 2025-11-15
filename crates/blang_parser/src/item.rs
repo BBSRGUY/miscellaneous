@@ -810,7 +810,7 @@ impl<'a> Parser<'a> {
         Ok(ComponentItem::Props(prop_decls))
     }
 
-    /// Parse a script declaration (simplified).
+    /// Parse a script declaration.
     fn parse_script(&mut self, attrs: Vec<Attr>) -> ParseResult<ItemKind> {
         self.stream.expect(TokenKind::Script).map_err(|_| {
             ParseError::missing_token(TokenKind::Script, self.stream.current_span())
@@ -822,12 +822,247 @@ impl<'a> Parser<'a> {
             ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
         })?;
 
-        let items = Vec::new(); // Simplified
+        let mut items = Vec::new();
+
+        // Parse script items (config, schedule, state, job, etc.)
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let item = self.parse_script_item()?;
+            items.push(item);
+        }
 
         self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
             ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
         })?;
 
         Ok(ItemKind::Script(ScriptDecl { attrs, name, items }))
+    }
+
+    /// Parse a script item (config, schedule, state, job, fn).
+    fn parse_script_item(&mut self) -> ParseResult<ScriptItem> {
+        // Check for keywords
+        if self.stream.at(TokenKind::Job) {
+            return self.parse_script_job();
+        }
+        if self.stream.at(TokenKind::State) {
+            return self.parse_script_state();
+        }
+        if self.stream.at(TokenKind::Fn) {
+            let func = self.parse_function(Vec::new(), false)?;
+            if let ItemKind::Function(decl) = func {
+                return Ok(ScriptItem::Function(decl));
+            }
+        }
+
+        // Check for identifiers that might be config or schedule
+        if self.stream.peek_kind() == TokenKind::Ident {
+            let checkpoint = self.stream.checkpoint();
+            let ident = self.parse_ident()?;
+
+            if ident.name == "config" {
+                return self.parse_script_config();
+            } else if ident.name == "schedule" {
+                return self.parse_script_schedule();
+            } else {
+                // Restore if not recognized
+                self.stream.restore(checkpoint);
+            }
+        }
+
+        Err(ParseError::new(
+            ParseErrorKind::InvalidLiteral {
+                message: "expected script item (config, schedule, state, job, or fn)".to_string(),
+            },
+            self.stream.current_span(),
+        ))
+    }
+
+    /// Parse script config block.
+    fn parse_script_config(&mut self) -> ParseResult<ScriptItem> {
+        // Already consumed "config" identifier
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        let mut config_options = Vec::new();
+
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let name = self.parse_ident()?;
+            self.stream.expect(TokenKind::Colon).map_err(|_| {
+                ParseError::missing_token(TokenKind::Colon, self.stream.current_span())
+            })?;
+            let value = self.parse_literal()?;
+            self.stream.eat(TokenKind::Semi);
+
+            config_options.push(ConfigOption { name, value });
+        }
+
+        self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
+        })?;
+
+        Ok(ScriptItem::Config(config_options))
+    }
+
+    /// Parse script schedule block.
+    fn parse_script_schedule(&mut self) -> ParseResult<ScriptItem> {
+        // Already consumed "schedule" identifier
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        let mut schedule_options = Vec::new();
+
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let name = self.parse_ident()?;
+            self.stream.expect(TokenKind::Colon).map_err(|_| {
+                ParseError::missing_token(TokenKind::Colon, self.stream.current_span())
+            })?;
+            let value = self.parse_literal()?;
+            self.stream.eat(TokenKind::Semi);
+
+            schedule_options.push(ScheduleOption { name, value });
+        }
+
+        self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
+        })?;
+
+        Ok(ScriptItem::Schedule(schedule_options))
+    }
+
+    /// Parse script state block (similar to component state).
+    fn parse_script_state(&mut self) -> ParseResult<ScriptItem> {
+        self.stream.expect(TokenKind::State).map_err(|_| {
+            ParseError::missing_token(TokenKind::State, self.stream.current_span())
+        })?;
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        let mut state_decls = Vec::new();
+
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let name = self.parse_ident()?;
+            self.stream.expect(TokenKind::Colon).map_err(|_| {
+                ParseError::missing_token(TokenKind::Colon, self.stream.current_span())
+            })?;
+            let ty = self.parse_ty()?;
+
+            let init = if self.stream.eat(TokenKind::Eq) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+
+            self.stream.eat(TokenKind::Semi);
+
+            state_decls.push(StateDecl { name, ty, init });
+        }
+
+        self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
+        })?;
+        Ok(ScriptItem::State(state_decls))
+    }
+
+    /// Parse a job declaration.
+    fn parse_script_job(&mut self) -> ParseResult<ScriptItem> {
+        self.stream.expect(TokenKind::Job).map_err(|_| {
+            ParseError::missing_token(TokenKind::Job, self.stream.current_span())
+        })?;
+
+        let name = self.parse_ident()?;
+
+        // Check for dependencies (e.g., "after job1, job2")
+        let mut depends_on = Vec::new();
+        if self.stream.peek_kind() == TokenKind::Ident {
+            let checkpoint = self.stream.checkpoint();
+            let ident = self.parse_ident()?;
+            if ident.name == "after" {
+                // Parse comma-separated list of job names
+                loop {
+                    depends_on.push(self.parse_ident()?);
+                    if !self.stream.eat(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            } else {
+                self.stream.restore(checkpoint);
+            }
+        }
+
+        self.stream.expect(TokenKind::OpenBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::OpenBrace, self.stream.current_span())
+        })?;
+
+        let mut steps = Vec::new();
+
+        while !self.stream.at(TokenKind::CloseBrace) && !self.stream.at_eof() {
+            let step = self.parse_step()?;
+            steps.push(step);
+        }
+
+        self.stream.expect(TokenKind::CloseBrace).map_err(|_| {
+            ParseError::missing_token(TokenKind::CloseBrace, self.stream.current_span())
+        })?;
+
+        Ok(ScriptItem::Job(JobDecl {
+            name,
+            depends_on,
+            steps,
+        }))
+    }
+
+    /// Parse a step declaration.
+    fn parse_step(&mut self) -> ParseResult<StepDecl> {
+        // Check for parallel block
+        let parallel = self.stream.eat(TokenKind::Parallel);
+
+        self.stream.expect(TokenKind::Step).map_err(|_| {
+            ParseError::missing_token(TokenKind::Step, self.stream.current_span())
+        })?;
+
+        let name = self.parse_ident()?;
+
+        // Parse optional step config in parentheses
+        let mut config = Vec::new();
+        if self.stream.eat(TokenKind::OpenParen) {
+            while !self.stream.at(TokenKind::CloseParen) && !self.stream.at_eof() {
+                let opt_name = self.parse_ident()?;
+                self.stream.expect(TokenKind::Colon).map_err(|_| {
+                    ParseError::missing_token(TokenKind::Colon, self.stream.current_span())
+                })?;
+
+                // Value can be a literal or identifier
+                let value = if self.stream.peek_kind() == TokenKind::Ident {
+                    StepOptionValue::Ident(self.parse_ident()?)
+                } else {
+                    StepOptionValue::Literal(self.parse_literal()?)
+                };
+
+                config.push(StepOption {
+                    name: opt_name,
+                    value,
+                });
+
+                if !self.stream.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+
+            self.stream.expect(TokenKind::CloseParen).map_err(|_| {
+                ParseError::missing_token(TokenKind::CloseParen, self.stream.current_span())
+            })?;
+        }
+
+        // Parse step body
+        let body = self.parse_block()?;
+
+        Ok(StepDecl {
+            name,
+            config,
+            body,
+            parallel,
+        })
     }
 }

@@ -1,0 +1,32 @@
+[package]
+name = "blang_job_engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# For error handling
+thiserror = "1.0"
+
+# For scheduling (cron expressions)
+cron = { version = "0.12", optional = true }
+
+# For async runtime (optional, for advanced scheduling)
+tokio = { version = "1.0", features = ["time", "rt"], optional = true }
+
+# For WASM browser integration
+blang_runtime = { workspace = true, optional = true }
+
+[dev-dependencies]
+
+[features]
+default = []
+# Enable cron-based scheduling
+scheduling = ["cron"]
+# Enable async support
+async = ["tokio"]
+# Enable browser timer integration (WASM)
+browser = ["blang_runtime"]

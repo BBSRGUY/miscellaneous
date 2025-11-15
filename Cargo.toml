@@ -18,6 +18,7 @@ members = [
     "crates/blang_component",
     "crates/blang_script",
     "crates/blang_runtime",
+    "crates/blang_job_engine",
     "crates/blang_driver",
     "crates/blang_cli",
     "crates/blang_dev_server",
