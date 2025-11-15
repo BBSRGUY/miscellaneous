@@ -47,3 +47,5 @@ blang_codegen_wasm = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.13"
+wasmtime = { workspace = true }
+proptest = { workspace = true }
