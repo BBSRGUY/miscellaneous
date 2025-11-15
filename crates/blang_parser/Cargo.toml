@@ -8,3 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+blang_lexer = { path = "../blang_lexer" }
+blang_ast = { path = "../blang_ast" }
+blang_span = { path = "../blang_span" }
+thiserror = "1.0"

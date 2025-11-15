@@ -66,6 +66,12 @@ version = "0.1.0"
 [[package]]
 name = "blang_parser"
 version = "0.1.0"
+dependencies = [
+ "blang_ast",
+ "blang_lexer",
+ "blang_span",
+ "thiserror",
+]
 
 [[package]]
 name = "blang_resolve"
