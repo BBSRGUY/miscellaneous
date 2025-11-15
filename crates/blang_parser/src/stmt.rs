@@ -1,5 +1,6 @@
 //! Statement parsing.
 
+use crate::utils::BytePosExt;
 use crate::error::{ParseError, ParseResult};
 use crate::parser::Parser;
 use blang_ast::{LetStmt, Stmt, StmtKind};
@@ -78,7 +79,6 @@ impl<'a> Parser<'a> {
                 | TokenKind::Impl
                 | TokenKind::Type
                 | TokenKind::Const
-                | TokenKind::Static
                 | TokenKind::Pub
         )
     }

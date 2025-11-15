@@ -2,6 +2,7 @@
 
 use crate::error::{ParseError, ParseErrorKind, ParseResult};
 use crate::parser::Parser;
+use crate::utils::{BytePosExt, TokenExt};
 use blang_ast::*;
 use blang_lexer::TokenKind;
 
@@ -195,7 +196,7 @@ impl<'a> Parser<'a> {
                 })
             }
 
-            TokenKind::Not => {
+            TokenKind::Bang => {
                 self.stream.next();
                 let expr = self.parse_expr_with_precedence(Precedence::Unary)?;
                 ExprKind::Unary(UnaryExpr {
@@ -302,7 +303,7 @@ impl<'a> Parser<'a> {
             | TokenKind::AndAnd
             | TokenKind::OrOr
             | TokenKind::And
-            | TokenKind::Pipe
+            | TokenKind::Or
             | TokenKind::Caret
             | TokenKind::Shl
             | TokenKind::Shr
@@ -317,8 +318,9 @@ impl<'a> Parser<'a> {
             | TokenKind::CaretEq
             | TokenKind::ShlEq
             | TokenKind::ShrEq => {
-                let op = self.token_to_binary_op(self.stream.peek_kind());
+                let kind = self.stream.peek_kind();
                 self.stream.next();
+                let op = self.token_to_binary_op(kind);
                 let right = self.parse_expr_with_precedence(prec.next())?;
                 let end = right.span.end;
                 Ok(Expr::new(
@@ -546,7 +548,7 @@ impl<'a> Parser<'a> {
                 Ok(Lit::string(value, src.to_string(), raw))
             }
 
-            TokenKind::TemplateString => {
+            TokenKind::TemplateString { .. } => {
                 let parts = self.parse_template_parts(src)?;
                 Ok(Lit::template(parts))
             }

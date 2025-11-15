@@ -1,5 +1,6 @@
 //! Expression parsing helpers.
 
+use crate::utils::BytePosExt;
 use crate::error::{ParseError, ParseResult};
 use crate::parser::Parser;
 use blang_ast::*;
@@ -189,13 +190,13 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_closure_expr(&mut self) -> ParseResult<Expr> {
         let start = self.stream.current_span().start;
 
-        self.stream.expect(TokenKind::Pipe).map_err(|_| {
-            ParseError::missing_token(TokenKind::Pipe, self.stream.current_span())
+        self.stream.expect(TokenKind::Or).map_err(|_| {
+            ParseError::missing_token(TokenKind::Or, self.stream.current_span())
         })?;
 
         let mut params = Vec::new();
 
-        if !self.stream.at(TokenKind::Pipe) {
+        if !self.stream.at(TokenKind::Or) {
             loop {
                 let pat = self.parse_pat()?;
                 let ty = if self.stream.eat(TokenKind::Colon) {
@@ -212,8 +213,8 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.stream.expect(TokenKind::Pipe).map_err(|_| {
-            ParseError::missing_token(TokenKind::Pipe, self.stream.current_span())
+        self.stream.expect(TokenKind::Or).map_err(|_| {
+            ParseError::missing_token(TokenKind::Or, self.stream.current_span())
         })?;
 
         let body = if self.stream.at(TokenKind::OpenBrace) {

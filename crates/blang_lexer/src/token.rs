@@ -26,7 +26,7 @@ impl Token {
 }
 
 /// The kind of a token.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     // Literals
     /// Integer literal (e.g., `42`, `0xFF`, `0b1010`)
@@ -90,6 +90,8 @@ pub enum TokenKind {
     Do,
     /// `else`
     Else,
+    /// `effect`
+    Effect,
     /// `enum`
     Enum,
     /// `export`
@@ -118,6 +120,8 @@ pub enum TokenKind {
     Loop,
     /// `match`
     Match,
+    /// `memo`
+    Memo,
     /// `module`
     Module,
     /// `mut`
@@ -342,6 +346,7 @@ impl TokenKind {
                 | TokenKind::DependsOn
                 | TokenKind::Do
                 | TokenKind::Else
+                | TokenKind::Effect
                 | TokenKind::Enum
                 | TokenKind::Export
                 | TokenKind::False
@@ -356,6 +361,7 @@ impl TokenKind {
                 | TokenKind::Let
                 | TokenKind::Loop
                 | TokenKind::Match
+                | TokenKind::Memo
                 | TokenKind::Module
                 | TokenKind::Mut
                 | TokenKind::Null
@@ -432,6 +438,7 @@ impl fmt::Display for TokenKind {
             TokenKind::DependsOn => write!(f, "`depends_on`"),
             TokenKind::Do => write!(f, "`do`"),
             TokenKind::Else => write!(f, "`else`"),
+            TokenKind::Effect => write!(f, "`effect`"),
             TokenKind::Enum => write!(f, "`enum`"),
             TokenKind::Export => write!(f, "`export`"),
             TokenKind::False => write!(f, "`false`"),
@@ -446,6 +453,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Let => write!(f, "`let`"),
             TokenKind::Loop => write!(f, "`loop`"),
             TokenKind::Match => write!(f, "`match`"),
+            TokenKind::Memo => write!(f, "`memo`"),
             TokenKind::Module => write!(f, "`module`"),
             TokenKind::Mut => write!(f, "`mut`"),
             TokenKind::Null => write!(f, "`null`"),
@@ -556,6 +564,7 @@ pub fn str_to_keyword(s: &str) -> Option<TokenKind> {
         "depends_on" => TokenKind::DependsOn,
         "do" => TokenKind::Do,
         "else" => TokenKind::Else,
+        "effect" => TokenKind::Effect,
         "enum" => TokenKind::Enum,
         "export" => TokenKind::Export,
         "false" => TokenKind::False,
@@ -570,6 +579,7 @@ pub fn str_to_keyword(s: &str) -> Option<TokenKind> {
         "let" => TokenKind::Let,
         "loop" => TokenKind::Loop,
         "match" => TokenKind::Match,
+        "memo" => TokenKind::Memo,
         "module" => TokenKind::Module,
         "mut" => TokenKind::Mut,
         "null" => TokenKind::Null,

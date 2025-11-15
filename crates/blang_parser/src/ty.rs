@@ -2,7 +2,8 @@
 
 use crate::error::{ParseError, ParseErrorKind, ParseResult};
 use crate::parser::Parser;
-use blang_ast::{ArrayLen, ArrayTy, FunctionTy, Path, PointerTy, PrimitiveTy, ReferenceTy, Ty, TyKind};
+use crate::utils::{BytePosExt, TokenExt};
+use blang_ast::{ArrayLen, ArrayTy, FunctionTy, PointerTy, PrimitiveTy, ReferenceTy, Ty, TyKind};
 use blang_lexer::TokenKind;
 
 impl<'a> Parser<'a> {
@@ -11,59 +12,6 @@ impl<'a> Parser<'a> {
         let start = self.stream.current_span().start;
 
         let kind = match self.stream.peek_kind() {
-            // Primitive types
-            TokenKind::I8 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::I8)
-            }
-            TokenKind::I16 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::I16)
-            }
-            TokenKind::I32 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::I32)
-            }
-            TokenKind::I64 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::I64)
-            }
-            TokenKind::U8 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::U8)
-            }
-            TokenKind::U16 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::U16)
-            }
-            TokenKind::U32 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::U32)
-            }
-            TokenKind::U64 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::U64)
-            }
-            TokenKind::F32 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::F32)
-            }
-            TokenKind::F64 => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::F64)
-            }
-            TokenKind::Bool => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::Bool)
-            }
-            TokenKind::Char => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::Char)
-            }
-            TokenKind::Str => {
-                self.stream.next();
-                TyKind::Primitive(PrimitiveTy::Str)
-            }
 
             // Reference types: &T or &mut T
             TokenKind::And => {
@@ -171,15 +119,25 @@ impl<'a> Parser<'a> {
             }
 
             // Never type: !
-            TokenKind::Not => {
+            TokenKind::Bang => {
                 self.stream.next();
                 TyKind::Never
             }
 
-            // Path type (identifier or qualified path)
+            // Path type (identifier or qualified path) or primitive type
             TokenKind::Ident => {
-                let path = self.parse_path_with_generics()?;
-                TyKind::Path(path)
+                // Check if it's a primitive type
+                let token_start = self.stream.current_span().start;
+                let token_len = self.stream.peek().len;
+                let name = &self.source[token_start.0 as usize..(token_start.0 + token_len as u32) as usize];
+
+                if let Some(prim) = PrimitiveTy::from_str(name) {
+                    self.stream.next();
+                    TyKind::Primitive(prim)
+                } else {
+                    let path = self.parse_path_with_generics()?;
+                    TyKind::Path(path)
+                }
             }
 
             _ => {

@@ -45,7 +45,7 @@ impl<'a> TokenStream<'a> {
 
     /// Get the kind of the current token.
     pub fn peek_kind(&mut self) -> TokenKind {
-        self.peek().kind
+        self.peek().kind.clone()
     }
 
     /// Check if the current token matches the given kind.
@@ -91,7 +91,7 @@ impl<'a> TokenStream<'a> {
             Ok(self.next())
         } else {
             let found = self.peek();
-            Err((found.kind, found.span()))
+            Err((found.kind.clone(), found.span()))
         }
     }
 

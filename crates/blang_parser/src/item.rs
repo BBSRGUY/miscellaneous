@@ -1,5 +1,6 @@
 //! Item (declaration) parsing.
 
+use crate::utils::BytePosExt;
 use crate::error::{ParseError, ParseErrorKind, ParseResult};
 use crate::parser::Parser;
 use blang_ast::*;
@@ -24,7 +25,6 @@ impl<'a> Parser<'a> {
             TokenKind::Impl => self.parse_impl(attrs)?,
             TokenKind::Type => self.parse_type_alias(attrs, public)?,
             TokenKind::Const => self.parse_const(attrs, public)?,
-            TokenKind::Static => self.parse_static(attrs, public)?,
             TokenKind::Module => self.parse_module(attrs, public)?,
             TokenKind::Use => self.parse_use(attrs)?,
             TokenKind::Component => self.parse_component(attrs)?,
@@ -517,8 +517,8 @@ impl<'a> Parser<'a> {
 
     /// Parse a static declaration.
     fn parse_static(&mut self, attrs: Vec<Attr>, public: bool) -> ParseResult<ItemKind> {
-        self.stream.expect(TokenKind::Static).map_err(|_| {
-            ParseError::missing_token(TokenKind::Static, self.stream.current_span())
+        self.stream.expect(TokenKind::Const).map_err(|_| {
+            ParseError::missing_token(TokenKind::Const, self.stream.current_span())
         })?;
 
         let mutable = self.stream.eat(TokenKind::Mut);

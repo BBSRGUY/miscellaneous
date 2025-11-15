@@ -2,7 +2,7 @@
 
 use crate::error::{ParseError, ParseErrorKind, ParseResult};
 use crate::token_stream::TokenStream;
-use crate::utils::BytePosExt;
+use crate::utils::{BytePosExt, TokenExt};
 use blang_ast::{GenericArgs, Ident, Path, PathSegment};
 use blang_lexer::TokenKind;
 use blang_span::Span;

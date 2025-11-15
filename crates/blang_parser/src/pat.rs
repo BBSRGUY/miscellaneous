@@ -1,5 +1,6 @@
 //! Pattern parsing.
 
+use crate::utils::BytePosExt;
 use crate::error::{ParseError, ParseErrorKind, ParseResult};
 use crate::parser::Parser;
 use blang_ast::{
@@ -14,12 +15,6 @@ impl<'a> Parser<'a> {
         let start = self.stream.current_span().start;
 
         let kind = match self.stream.peek_kind() {
-            // Wildcard pattern: _
-            TokenKind::Underscore => {
-                self.stream.next();
-                PatKind::Wildcard
-            }
-
             // Rest pattern: ..
             TokenKind::DotDot => {
                 self.stream.next();
@@ -89,9 +84,9 @@ impl<'a> Parser<'a> {
         let mut pat = Pat::new(kind, start.to(end));
 
         // Check for OR pattern: p1 | p2
-        if self.stream.at(TokenKind::Pipe) {
+        if self.stream.at(TokenKind::Or) {
             let mut patterns = vec![pat];
-            while self.stream.eat(TokenKind::Pipe) {
+            while self.stream.eat(TokenKind::Or) {
                 patterns.push(self.parse_pat()?);
             }
             let end = self.stream.last_span().end;
@@ -104,6 +99,19 @@ impl<'a> Parser<'a> {
     /// Parse an identifier or path-based pattern.
     fn parse_ident_or_path_pattern(&mut self) -> ParseResult<PatKind> {
         let checkpoint = self.stream.checkpoint();
+
+        // Check for wildcard pattern "_"
+        if self.stream.at(TokenKind::Ident) {
+            let token_start = self.stream.current_span().start;
+            let token_len = self.stream.peek().len;
+            let name = &self.source[token_start.0 as usize..(token_start.0 + token_len as u32) as usize];
+
+            if name == "_" {
+                self.stream.next();
+                return Ok(PatKind::Wildcard);
+            }
+        }
+
         let path = self.parse_path()?;
 
         // Check if this is a struct or tuple struct pattern
