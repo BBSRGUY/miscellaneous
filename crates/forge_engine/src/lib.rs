@@ -3,11 +3,68 @@
 //! Model backends, inference, and training interfaces for the Forge platform.
 //!
 //! This crate provides the core abstractions for running LLMs locally,
-//! including inference, training (LoRA/QLoRA), and model execution.
+//! including inference with streaming, training (LoRA/QLoRA), and model execution.
+//!
+//! ## Architecture
+//!
+//! The engine is organized into several modules:
+//!
+//! - `types` - Core type definitions (DeviceKind, ModelSpec, InferenceRequest, etc.)
+//! - `backend` - ModelBackend trait for implementing model backends
+//! - `echo` - Dummy echo backend for testing
+//! - `engine` - High-level Engine for managing models and running operations
+//!
+//! ## Example
+//!
+//! ```no_run
+//! use forge_engine::{Engine, EchoBackend, ModelSpec, InferenceRequest};
+//! use std::sync::Arc;
+//! use std::path::PathBuf;
+//! use futures::StreamExt;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Create engine with echo backend
+//!     let backend = Arc::new(EchoBackend::new());
+//!     let engine = Engine::new(backend);
+//!
+//!     // Load a model
+//!     let spec = ModelSpec::new(
+//!         "my-model".to_string(),
+//!         PathBuf::from("model.bin"),
+//!         "echo".to_string(),
+//!         "bin".to_string(),
+//!     );
+//!     let handle = engine.load_model(&spec).await?;
+//!
+//!     // Run inference with streaming
+//!     let request = InferenceRequest::from_prompt(
+//!         handle.id.clone(),
+//!         "Hello, world!".to_string(),
+//!     );
+//!
+//!     let mut stream = engine.run_inference(request).await?;
+//!     while let Some(chunk) = stream.next().await {
+//!         let chunk = chunk?;
+//!         print!("{}", chunk.text);
+//!     }
+//!
+//!     Ok(())
+//! }
+//! ```
 
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+pub mod backend;
+pub mod echo;
+pub mod engine;
+pub mod types;
+
 use thiserror::Error;
+
+// Re-export commonly used types
+pub use backend::{InferenceStream, ModelBackend, ModelInfo};
+pub use echo::EchoBackend;
+pub use engine::Engine;
+pub use types::*;
 
 /// Errors that can occur during model inference or training.
 #[derive(Debug, Error)]
@@ -24,111 +81,137 @@ pub enum EngineError {
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
 
+    #[error("Backend error: {0}")]
+    BackendError(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
-/// Request for text generation/completion.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompletionRequest {
-    pub prompt: String,
-    pub max_tokens: Option<usize>,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub stop_sequences: Option<Vec<String>>,
-}
-
-/// Response from text generation/completion.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompletionResponse {
-    pub text: String,
-    pub tokens_generated: usize,
-    pub finish_reason: FinishReason,
-}
-
-/// Reason why text generation stopped.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum FinishReason {
-    /// Reached maximum token limit
-    MaxTokens,
-    /// Hit a stop sequence
-    StopSequence,
-    /// Model indicated end of generation
-    EndOfText,
-}
-
-/// Trait for inference backends.
-#[async_trait]
-pub trait InferenceBackend: Send + Sync {
-    /// Generate text completion from a prompt.
-    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse>;
-
-    /// Get model information.
-    fn model_info(&self) -> ModelInfo;
-}
-
-/// Information about a loaded model.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelInfo {
-    pub name: String,
-    pub backend: String,
-    pub parameters: u64,
-    pub context_length: usize,
-}
-
-/// Simple echo backend for testing (returns the prompt as completion).
-pub struct EchoBackend {
-    model_name: String,
-}
-
-impl EchoBackend {
-    pub fn new(model_name: String) -> Self {
-        Self { model_name }
-    }
-}
-
-#[async_trait]
-impl InferenceBackend for EchoBackend {
-    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
-        let max_tokens = request.max_tokens.unwrap_or(100);
-        let response_text = format!("Echo: {}", request.prompt);
-
-        Ok(CompletionResponse {
-            text: response_text.chars().take(max_tokens).collect(),
-            tokens_generated: max_tokens.min(response_text.len()),
-            finish_reason: FinishReason::MaxTokens,
-        })
-    }
-
-    fn model_info(&self) -> ModelInfo {
-        ModelInfo {
-            name: self.model_name.clone(),
-            backend: "echo".to_string(),
-            parameters: 0,
-            context_length: 2048,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
+    use std::path::PathBuf;
+    use std::sync::Arc;
 
     #[tokio::test]
-    async fn test_echo_backend() {
-        let backend = EchoBackend::new("test-model".to_string());
-        let request = CompletionRequest {
-            prompt: "Hello, world!".to_string(),
-            max_tokens: Some(50),
-            temperature: None,
-            top_p: None,
-            stop_sequences: None,
+    async fn test_end_to_end_workflow() {
+        // Create engine with echo backend
+        let backend = Arc::new(EchoBackend::new());
+        let engine = Engine::new(backend);
+
+        // Load a model
+        let spec = ModelSpec::new(
+            "test-model".to_string(),
+            PathBuf::from("model.bin"),
+            "echo".to_string(),
+            "bin".to_string(),
+        );
+
+        let handle = engine.load_model(&spec).await.unwrap();
+
+        // Run inference
+        let request = InferenceRequest::from_prompt(
+            handle.id.clone(),
+            "Test prompt".to_string(),
+        );
+
+        let mut stream = engine.run_inference(request).await.unwrap();
+
+        let mut text = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result.unwrap();
+            text.push_str(&chunk.text);
+        }
+
+        assert!(text.contains("Echo:"));
+        assert!(text.contains("Test prompt"));
+
+        // Unload model
+        engine.unload_model(&handle.id).await.unwrap();
+        assert_eq!(engine.model_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_message_based_inference() {
+        let backend = Arc::new(EchoBackend::new());
+        let engine = Engine::new(backend);
+
+        let spec = ModelSpec::new(
+            "test-model".to_string(),
+            PathBuf::from("model.bin"),
+            "echo".to_string(),
+            "bin".to_string(),
+        );
+
+        let handle = engine.load_model(&spec).await.unwrap();
+
+        // Create conversation
+        let messages = vec![
+            Message {
+                role: MessageRole::System,
+                content: "You are a helpful assistant.".to_string(),
+            },
+            Message {
+                role: MessageRole::User,
+                content: "Hello!".to_string(),
+            },
+        ];
+
+        let request = InferenceRequest::from_messages(handle.id.clone(), messages);
+
+        let mut stream = engine.run_inference(request).await.unwrap();
+
+        let mut got_response = false;
+        while let Some(chunk_result) = stream.next().await {
+            chunk_result.unwrap();
+            got_response = true;
+        }
+
+        assert!(got_response);
+    }
+
+    #[tokio::test]
+    async fn test_training_workflow() {
+        let backend = Arc::new(EchoBackend::new());
+        let engine = Engine::new(backend);
+
+        let spec = ModelSpec::new(
+            "test-model".to_string(),
+            PathBuf::from("model.bin"),
+            "echo".to_string(),
+            "bin".to_string(),
+        );
+
+        let handle = engine.load_model(&spec).await.unwrap();
+
+        // Create training batch
+        let batch = TrainBatch {
+            inputs: vec![vec![1, 2, 3, 4, 5]],
+            targets: vec![vec![2, 3, 4, 5, 6]],
+            masks: None,
         };
 
-        let response = backend.complete(request).await.unwrap();
-        assert!(response.text.starts_with("Echo:"));
-        assert!(response.text.contains("Hello, world!"));
+        let config = TrainConfig {
+            learning_rate: 1e-4,
+            batch_size: 1,
+            epochs: 1,
+            gradient_accumulation_steps: 1,
+            max_grad_norm: 1.0,
+            lora_rank: Some(8),
+            lora_alpha: Some(16.0),
+        };
+
+        let result = engine
+            .train_step(&handle.id, batch, &config)
+            .await
+            .unwrap();
+
+        assert!(result.loss > 0.0);
+        assert_eq!(result.learning_rate, 1e-4);
+        assert_eq!(result.tokens_processed, 5);
     }
 }
