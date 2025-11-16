@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF & EPUB Reader - Smart Highlighter</title>
+
+    <!-- PDF.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <!-- EPub.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --background: #0f172a;
+            --surface: #1e293b;
+            --surface-light: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --highlight-yellow: rgba(253, 224, 71, 0.4);
+            --highlight-green: rgba(134, 239, 172, 0.4);
+            --highlight-blue: rgba(147, 197, 253, 0.4);
+            --highlight-pink: rgba(251, 207, 232, 0.4);
+            --highlight-orange: rgba(254, 215, 170, 0.4);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--background) 0%, #1a1f3a 100%);
+            color: var(--text);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header */
+        header {
+            background: var(--surface);
+            padding: 1rem 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            border-bottom: 2px solid var(--primary);
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo {
+            font-size: 2rem;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .upload-box {
+            background: var(--surface);
+            border: 3px dashed var(--border);
+            border-radius: 20px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .upload-box:hover {
+            border-color: var(--primary);
+            background: var(--surface-light);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+
+        .upload-box h2 {
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+
+        .upload-box p {
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .upload-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        /* Reader Section */
+        .reader-section {
+            display: none;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .reader-layout {
+            display: flex;
+            height: 100%;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 80px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 1rem 0;
+            gap: 0.5rem;
+            transition: width 0.3s ease;
+        }
+
+        .sidebar.expanded {
+            width: 300px;
+        }
+
+        .tool-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            position: relative;
+        }
+
+        .tool-btn:hover {
+            background: var(--surface-light);
+            color: var(--primary);
+        }
+
+        .tool-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .tool-icon {
+            font-size: 1.5rem;
+        }
+
+        /* Highlight Colors Panel */
+        .highlight-panel {
+            display: none;
+            padding: 1rem;
+            background: var(--surface-light);
+            margin: 0.5rem;
+            border-radius: 10px;
+        }
+
+        .highlight-panel.active {
+            display: block;
+        }
+
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .color-option {
+            padding: 0.75rem;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        .color-option:hover {
+            transform: scale(1.05);
+            border-color: white;
+        }
+
+        .color-option.selected {
+            border-color: white;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        .color-yellow { background: var(--highlight-yellow); color: #854d0e; }
+        .color-green { background: var(--highlight-green); color: #14532d; }
+        .color-blue { background: var(--highlight-blue); color: #1e3a8a; }
+        .color-pink { background: var(--highlight-pink); color: #831843; }
+        .color-orange { background: var(--highlight-orange); color: #7c2d12; }
+
+        /* Main Reader Area */
+        .reader-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Controls Bar */
+        .controls-bar {
+            background: var(--surface);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .control-btn {
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .control-btn:hover:not(:disabled) {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .zoom-slider {
+            width: 100px;
+        }
+
+        /* Document Viewer */
+        .document-viewer {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 2rem;
+            background: #f8fafc;
+            position: relative;
+        }
+
+        .document-viewer::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .document-viewer::-webkit-scrollbar-track {
+            background: var(--surface);
+        }
+
+        .document-viewer::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 5px;
+        }
+
+        /* PDF Canvas */
+        #pdf-canvas {
+            display: block;
+            margin: 0 auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            background: white;
+        }
+
+        /* EPUB Viewer */
+        #epub-viewer {
+            height: 100%;
+            background: white;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            margin: 0 auto;
+            max-width: 900px;
+        }
+
+        /* Text Layer for PDF highlighting */
+        .text-layer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            opacity: 0.2;
+            line-height: 1.0;
+            pointer-events: auto;
+        }
+
+        .text-layer > span {
+            color: transparent;
+            position: absolute;
+            white-space: pre;
+            cursor: text;
+            transform-origin: 0% 0%;
+        }
+
+        /* Highlights */
+        .highlight {
+            background-color: var(--highlight-yellow);
+            cursor: pointer;
+            position: relative;
+        }
+
+        .highlight.yellow { background-color: var(--highlight-yellow); }
+        .highlight.green { background-color: var(--highlight-green); }
+        .highlight.blue { background-color: var(--highlight-blue); }
+        .highlight.pink { background-color: var(--highlight-pink); }
+        .highlight.orange { background-color: var(--highlight-orange); }
+
+        /* Close Button */
+        .close-reader {
+            background: var(--error);
+            border: none;
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .close-reader:hover {
+            background: #dc2626;
+            transform: scale(1.05);
+        }
+
+        /* Loading Spinner */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
+        .spinner {
+            border: 4px solid var(--surface-light);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.5rem;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .tooltip button {
+            background: var(--error);
+            border: none;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .tooltip button:hover {
+            background: #dc2626;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .controls-bar {
+                padding: 0.75rem;
+            }
+
+            .control-group {
+                flex-wrap: wrap;
+            }
+
+            .sidebar {
+                width: 60px;
+            }
+
+            .sidebar.expanded {
+                width: 250px;
+            }
+
+            h1 {
+                font-size: 1.2rem;
+            }
+
+            .upload-box {
+                padding: 2rem;
+            }
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            background: var(--success);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="header-content">
+                <h1>
+                    <span class="logo">📚</span>
+                    Smart PDF & EPUB Reader
+                </h1>
+                <div id="file-name" style="color: var(--text-muted); font-size: 0.9rem;"></div>
+            </div>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="upload-section" id="upload-section">
+            <div class="upload-box" onclick="document.getElementById('file-input').click()">
+                <div class="upload-icon">📖</div>
+                <h2>Upload Your Document</h2>
+                <p>Drag and drop or click to select a PDF or EPUB file</p>
+                <button class="upload-btn">Choose File</button>
+                <input type="file" id="file-input" class="file-input" accept=".pdf,.epub">
+            </div>
+        </div>
+
+        <!-- Reader Section -->
+        <div class="reader-section" id="reader-section">
+            <div class="reader-layout">
+                <!-- Sidebar -->
+                <div class="sidebar" id="sidebar">
+                    <button class="tool-btn" onclick="toggleHighlightMode()" id="highlight-btn">
+                        <span class="tool-icon">🖍️</span>
+                        <span>Highlight</span>
+                    </button>
+                    <div class="highlight-panel" id="highlight-panel">
+                        <h3 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Select Color</h3>
+                        <div class="color-grid">
+                            <div class="color-option color-yellow selected" onclick="selectColor('yellow')">
+                                <strong>Yellow</strong>
+                            </div>
+                            <div class="color-option color-green" onclick="selectColor('green')">
+                                <strong>Green</strong>
+                            </div>
+                            <div class="color-option color-blue" onclick="selectColor('blue')">
+                                <strong>Blue</strong>
+                            </div>
+                            <div class="color-option color-pink" onclick="selectColor('pink')">
+                                <strong>Pink</strong>
+                            </div>
+                            <div class="color-option color-orange" onclick="selectColor('orange')">
+                                <strong>Orange</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="tool-btn" onclick="clearAllHighlights()">
+                        <span class="tool-icon">🗑️</span>
+                        <span>Clear</span>
+                    </button>
+                </div>
+
+                <!-- Main Reader -->
+                <div class="reader-main">
+                    <!-- Controls -->
+                    <div class="controls-bar">
+                        <div class="control-group">
+                            <button class="control-btn" onclick="previousPage()" id="prev-btn">← Previous</button>
+                            <span class="page-info" id="page-info">Page 1 of 1</span>
+                            <button class="control-btn" onclick="nextPage()" id="next-btn">Next →</button>
+                        </div>
+                        <div class="control-group">
+                            <button class="control-btn" onclick="zoomOut()">🔍-</button>
+                            <span class="page-info" id="zoom-info">100%</span>
+                            <button class="control-btn" onclick="zoomIn()">🔍+</button>
+                        </div>
+                        <button class="close-reader" onclick="closeReader()">Close Reader</button>
+                    </div>
+
+                    <!-- Document Viewer -->
+                    <div class="document-viewer" id="document-viewer">
+                        <div class="loading" id="loading">
+                            <div class="spinner"></div>
+                            <p>Loading document...</p>
+                        </div>
+                        <canvas id="pdf-canvas"></canvas>
+                        <div id="epub-viewer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div class="notification" id="notification"></div>
+
+    <!-- Tooltip for removing highlights -->
+    <div class="tooltip" id="tooltip">
+        <button onclick="removeHighlight()">Remove Highlight</button>
+    </div>
+
+    <script>
+        // Global variables
+        let currentDocument = null;
+        let currentFileType = null;
+        let currentPage = 1;
+        let totalPages = 1;
+        let pdfDoc = null;
+        let epubBook = null;
+        let currentZoom = 1.0;
+        let highlightMode = false;
+        let selectedColor = 'yellow';
+        let highlights = {};
+        let currentHighlightElement = null;
+
+        // Set PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // File input handler
+        document.getElementById('file-input').addEventListener('change', handleFileSelect);
+
+        // Drag and drop
+        const uploadBox = document.querySelector('.upload-box');
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.style.borderColor = 'var(--primary)';
+        });
+
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.style.borderColor = 'var(--border)';
+        });
+
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.style.borderColor = 'var(--border)';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+
+            if (fileExtension === 'pdf') {
+                currentFileType = 'pdf';
+                loadPDF(file);
+            } else if (fileExtension === 'epub') {
+                currentFileType = 'epub';
+                loadEPUB(file);
+            } else {
+                showNotification('Please select a valid PDF or EPUB file', 'error');
+                return;
+            }
+
+            document.getElementById('file-name').textContent = file.name;
+            currentDocument = file;
+            loadHighlights(file.name);
+        }
+
+        // PDF Loading and Rendering
+        async function loadPDF(file) {
+            showLoading(true);
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('reader-section').style.display = 'flex';
+            document.getElementById('pdf-canvas').style.display = 'block';
+            document.getElementById('epub-viewer').style.display = 'none';
+
+            const arrayBuffer = await file.arrayBuffer();
+            pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            totalPages = pdfDoc.numPages;
+            currentPage = 1;
+
+            renderPDFPage(currentPage);
+            showLoading(false);
+            showNotification('PDF loaded successfully!');
+        }
+
+        async function renderPDFPage(pageNum) {
+            const page = await pdfDoc.getPage(pageNum);
+            const canvas = document.getElementById('pdf-canvas');
+            const context = canvas.getContext('2d');
+
+            const viewport = page.getViewport({ scale: currentZoom * 1.5 });
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            const renderContext = {
+                canvasContext: context,
+                viewport: viewport
+            };
+
+            await page.render(renderContext).promise;
+
+            updatePageInfo();
+            applyHighlights();
+        }
+
+        // EPUB Loading and Rendering
+        async function loadEPUB(file) {
+            showLoading(true);
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('reader-section').style.display = 'flex';
+            document.getElementById('pdf-canvas').style.display = 'none';
+            document.getElementById('epub-viewer').style.display = 'block';
+
+            const arrayBuffer = await file.arrayBuffer();
+            epubBook = ePub(arrayBuffer);
+
+            const rendition = epubBook.renderTo("epub-viewer", {
+                width: "100%",
+                height: "100%",
+                spread: "none"
+            });
+
+            await rendition.display();
+
+            // Enable text selection and highlighting for EPUB
+            rendition.on("rendered", () => {
+                enableEPUBHighlighting(rendition);
+            });
+
+            // Navigation
+            rendition.on("relocated", (location) => {
+                currentPage = location.start.displayed.page;
+                totalPages = location.start.displayed.total;
+                updatePageInfo();
+            });
+
+            window.rendition = rendition;
+            showLoading(false);
+            showNotification('EPUB loaded successfully!');
+        }
+
+        function enableEPUBHighlighting(rendition) {
+            rendition.on("selected", (cfiRange, contents) => {
+                if (highlightMode) {
+                    rendition.annotations.highlight(cfiRange, {}, (e) => {
+                        console.log("Highlight clicked", e.target);
+                    }, "highlight-" + selectedColor, {
+                        "fill": getColorValue(selectedColor),
+                        "fill-opacity": "0.4",
+                        "mix-blend-mode": "multiply"
+                    });
+
+                    saveHighlight(cfiRange, selectedColor);
+                    showNotification(`Text highlighted in ${selectedColor}!`);
+                }
+            });
+        }
+
+        // Navigation
+        function previousPage() {
+            if (currentFileType === 'pdf' && currentPage > 1) {
+                currentPage--;
+                renderPDFPage(currentPage);
+            } else if (currentFileType === 'epub' && window.rendition) {
+                window.rendition.prev();
+            }
+        }
+
+        function nextPage() {
+            if (currentFileType === 'pdf' && currentPage < totalPages) {
+                currentPage++;
+                renderPDFPage(currentPage);
+            } else if (currentFileType === 'epub' && window.rendition) {
+                window.rendition.next();
+            }
+        }
+
+        // Zoom
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom + 0.2, 3.0);
+            if (currentFileType === 'pdf') {
+                renderPDFPage(currentPage);
+            }
+            updateZoomInfo();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom - 0.2, 0.5);
+            if (currentFileType === 'pdf') {
+                renderPDFPage(currentPage);
+            }
+            updateZoomInfo();
+        }
+
+        function updateZoomInfo() {
+            document.getElementById('zoom-info').textContent = Math.round(currentZoom * 100) + '%';
+        }
+
+        // Highlight Mode
+        function toggleHighlightMode() {
+            highlightMode = !highlightMode;
+            const btn = document.getElementById('highlight-btn');
+            const panel = document.getElementById('highlight-panel');
+
+            if (highlightMode) {
+                btn.classList.add('active');
+                panel.classList.add('active');
+                enableTextSelection();
+            } else {
+                btn.classList.remove('active');
+                panel.classList.remove('active');
+            }
+        }
+
+        function selectColor(color) {
+            selectedColor = color;
+            document.querySelectorAll('.color-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            event.target.closest('.color-option').classList.add('selected');
+        }
+
+        function getColorValue(color) {
+            const colors = {
+                'yellow': '#fde047',
+                'green': '#86efac',
+                'blue': '#93c5fd',
+                'pink': '#fbcfe8',
+                'orange': '#fed6aa'
+            };
+            return colors[color] || colors['yellow'];
+        }
+
+        // Text Selection for PDF
+        function enableTextSelection() {
+            if (currentFileType === 'pdf') {
+                const canvas = document.getElementById('pdf-canvas');
+                canvas.style.cursor = highlightMode ? 'text' : 'default';
+
+                document.addEventListener('mouseup', handlePDFTextSelection);
+            }
+        }
+
+        function handlePDFTextSelection() {
+            if (!highlightMode || currentFileType !== 'pdf') return;
+
+            const selection = window.getSelection();
+            if (selection.toString().trim().length === 0) return;
+
+            const range = selection.getRangeAt(0);
+            const span = document.createElement('span');
+            span.className = `highlight ${selectedColor}`;
+            span.dataset.page = currentPage;
+
+            try {
+                range.surroundContents(span);
+
+                // Save highlight
+                const highlightData = {
+                    text: selection.toString(),
+                    color: selectedColor,
+                    page: currentPage
+                };
+
+                saveHighlight(`pdf-page-${currentPage}-${Date.now()}`, selectedColor, highlightData);
+                showNotification(`Text highlighted in ${selectedColor}!`);
+
+                // Add click handler to remove highlight
+                span.addEventListener('click', function(e) {
+                    if (!highlightMode) {
+                        showTooltip(e.pageX, e.pageY, span);
+                    }
+                });
+
+                selection.removeAllRanges();
+            } catch (e) {
+                console.error('Could not apply highlight:', e);
+                showNotification('Could not highlight this text. Try a smaller selection.', 'error');
+            }
+        }
+
+        // Highlight Storage
+        function saveHighlight(id, color, data = null) {
+            const fileName = currentDocument.name;
+            if (!highlights[fileName]) {
+                highlights[fileName] = {};
+            }
+            highlights[fileName][id] = { color, data, timestamp: Date.now() };
+            localStorage.setItem('reader-highlights', JSON.stringify(highlights));
+        }
+
+        function loadHighlights(fileName) {
+            const stored = localStorage.getItem('reader-highlights');
+            if (stored) {
+                highlights = JSON.parse(stored);
+            }
+        }
+
+        function applyHighlights() {
+            // For PDF, highlights are applied through DOM manipulation during text selection
+            // For EPUB, highlights are applied through the rendition API
+            if (currentFileType === 'epub' && window.rendition && highlights[currentDocument.name]) {
+                Object.entries(highlights[currentDocument.name]).forEach(([cfiRange, data]) => {
+                    window.rendition.annotations.highlight(cfiRange, {}, (e) => {}, "highlight-" + data.color, {
+                        "fill": getColorValue(data.color),
+                        "fill-opacity": "0.4",
+                        "mix-blend-mode": "multiply"
+                    });
+                });
+            }
+        }
+
+        function clearAllHighlights() {
+            if (confirm('Are you sure you want to clear all highlights?')) {
+                const fileName = currentDocument.name;
+                if (highlights[fileName]) {
+                    delete highlights[fileName];
+                    localStorage.setItem('reader-highlights', JSON.stringify(highlights));
+                }
+
+                // Clear visual highlights
+                document.querySelectorAll('.highlight').forEach(el => {
+                    const parent = el.parentNode;
+                    parent.replaceChild(document.createTextNode(el.textContent), el);
+                });
+
+                if (currentFileType === 'epub' && window.rendition) {
+                    window.rendition.annotations.remove();
+                }
+
+                showNotification('All highlights cleared!');
+            }
+        }
+
+        function showTooltip(x, y, element) {
+            const tooltip = document.getElementById('tooltip');
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+            tooltip.style.display = 'block';
+            currentHighlightElement = element;
+        }
+
+        function removeHighlight() {
+            if (currentHighlightElement) {
+                const parent = currentHighlightElement.parentNode;
+                parent.replaceChild(document.createTextNode(currentHighlightElement.textContent), currentHighlightElement);
+                currentHighlightElement = null;
+                document.getElementById('tooltip').style.display = 'none';
+                showNotification('Highlight removed!');
+            }
+        }
+
+        // Close tooltip when clicking elsewhere
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.highlight') && !e.target.closest('.tooltip')) {
+                document.getElementById('tooltip').style.display = 'none';
+            }
+        });
+
+        // UI Updates
+        function updatePageInfo() {
+            document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prev-btn').disabled = currentPage <= 1;
+            document.getElementById('next-btn').disabled = currentPage >= totalPages;
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.background = type === 'error' ? 'var(--error)' : 'var(--success)';
+            notification.style.display = 'block';
+
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        function closeReader() {
+            document.getElementById('reader-section').style.display = 'none';
+            document.getElementById('upload-section').style.display = 'flex';
+            document.getElementById('file-input').value = '';
+            document.getElementById('file-name').textContent = '';
+
+            // Reset state
+            currentDocument = null;
+            currentFileType = null;
+            currentPage = 1;
+            totalPages = 1;
+            pdfDoc = null;
+            epubBook = null;
+            currentZoom = 1.0;
+            highlightMode = false;
+
+            if (window.rendition) {
+                window.rendition.destroy();
+                window.rendition = null;
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (document.getElementById('reader-section').style.display === 'flex') {
+                if (e.key === 'ArrowLeft') {
+                    previousPage();
+                } else if (e.key === 'ArrowRight') {
+                    nextPage();
+                } else if (e.key === 'h' && e.ctrlKey) {
+                    e.preventDefault();
+                    toggleHighlightMode();
+                } else if (e.key === '+' && e.ctrlKey) {
+                    e.preventDefault();
+                    zoomIn();
+                } else if (e.key === '-' && e.ctrlKey) {
+                    e.preventDefault();
+                    zoomOut();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
