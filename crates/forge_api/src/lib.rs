@@ -153,11 +153,25 @@ pub fn create_router(state: AppState) -> Router {
 
 /// Start the API server.
 pub async fn serve(port: u16) -> anyhow::Result<()> {
-    let state = AppState::new();
-    let app = create_router(state);
+    info!("Initializing Forge API server");
 
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
-    info!("API server listening on http://127.0.0.1:{}", port);
+    let state = AppState::new();
+    info!("Application state initialized");
+
+    let app = create_router(state);
+    info!("Router configured with {} routes", 4);
+
+    let addr = format!("127.0.0.1:{}", port);
+    info!("Binding to address: {}", addr);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+
+    info!("API server started successfully");
+    info!("Listening on http://{}", addr);
+    info!("Available endpoints:");
+    info!("  GET  /health   - Health check");
+    info!("  GET  /status   - System status");
+    info!("  GET  /models   - List models");
+    info!("  GET  /sessions - List sessions");
 
     axum::serve(listener, app).await?;
 

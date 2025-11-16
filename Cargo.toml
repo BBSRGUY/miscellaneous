@@ -45,6 +45,7 @@ tracing-appender = "0.2"
 
 # Configuration
 config = "0.14"
+serde_yaml = "0.9"
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "macros"] }

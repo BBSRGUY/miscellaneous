@@ -1,0 +1,96 @@
+# Forge Default Configuration
+#
+# This file contains the default configuration for the Forge platform.
+# You can override these settings by:
+# 1. Creating a configs/local.yaml file (git-ignored)
+# 2. Setting environment variables with FORGE__ prefix
+#    Example: FORGE__API__PORT=3001
+
+# API Server Configuration
+api:
+  # Host to bind the HTTP server to
+  # Use "0.0.0.0" to accept connections from any network interface
+  host: "127.0.0.1"
+
+  # Port for the HTTP API server
+  port: 3000
+
+  # Enable CORS for web clients
+  cors_enabled: true
+
+  # Request timeout in seconds
+  timeout_seconds: 30
+
+# Database Configuration
+db:
+  # SQLite database file path (relative to data_dir)
+  path: "forge.db"
+
+  # Enable Write-Ahead Logging for better concurrency
+  wal_mode: true
+
+  # Connection pool size
+  pool_size: 5
+
+  # Enable query logging (for debugging)
+  log_queries: false
+
+# Storage Configuration
+storage:
+  # Base directory for all data
+  data_dir: "data"
+
+  # Directory for model files (relative to data_dir)
+  models_dir: "models"
+
+  # Directory for datasets (relative to data_dir)
+  datasets_dir: "datasets"
+
+  # Directory for training checkpoints (relative to data_dir)
+  checkpoints_dir: "checkpoints"
+
+# Logging Configuration
+logging:
+  # Log level: trace, debug, info, warn, error
+  level: "info"
+
+  # Log format: json, pretty, compact
+  # - json: Structured JSON logs for production
+  # - pretty: Human-readable colored logs for development
+  # - compact: Compact single-line logs
+  format: "pretty"
+
+  # Enable file logging
+  file_enabled: false
+
+  # Log file path (relative to data_dir)
+  file_path: "logs/forge.log"
+
+  # Enable console/stderr logging
+  console_enabled: true
+
+# Inference Configuration
+inference:
+  # Maximum number of concurrent inference tasks
+  max_concurrent_tasks: 4
+
+  # Default temperature for text generation (0.0 - 2.0)
+  # Lower values make output more focused and deterministic
+  default_temperature: 0.7
+
+  # Default maximum tokens to generate
+  default_max_tokens: 2048
+
+  # Enable model caching to speed up repeated loads
+  enable_model_cache: true
+
+# GPU Configuration
+gpu:
+  # Enable GPU acceleration
+  enabled: true
+
+  # Prefer high-performance GPU (vs. low-power)
+  high_performance: true
+
+  # Enable WebGPU support
+  webgpu_enabled: true

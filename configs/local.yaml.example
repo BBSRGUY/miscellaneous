@@ -1,0 +1,22 @@
+# Forge Local Configuration Example
+#
+# Copy this file to local.yaml and customize for your environment.
+# The local.yaml file is git-ignored and will override default.yaml settings.
+
+# Example: Change API port
+# api:
+#   port: 3001
+#   host: "0.0.0.0"  # Allow external connections
+
+# Example: Enable debug logging
+# logging:
+#   level: "debug"
+#   format: "pretty"
+
+# Example: Custom data directory
+# storage:
+#   data_dir: "/var/lib/forge"
+
+# Example: GPU settings
+# gpu:
+#   enabled: false  # Disable GPU on systems without GPU

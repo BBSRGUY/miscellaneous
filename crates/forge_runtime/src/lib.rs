@@ -6,6 +6,9 @@
 //! training tasks, including session management, task scheduling, and
 //! execution pipelines.
 
+pub mod config;
+pub mod logging;
+
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};

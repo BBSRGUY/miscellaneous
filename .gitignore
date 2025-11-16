@@ -48,6 +48,12 @@ logs/
 .env.local
 .env.*.local
 
+# Local configuration
+configs/local.yaml
+
+# Data directory
+data/
+
 # Model files (large)
 models/
 datasets/
