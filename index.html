@@ -336,10 +336,15 @@
             border-radius: 5px;
         }
 
-        /* PDF Canvas */
+        /* PDF Container */
+        #pdf-container {
+            position: relative;
+            display: inline-block;
+            margin: 0 auto;
+        }
+
         #pdf-canvas {
             display: block;
-            margin: 0 auto;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
             background: white;
         }
@@ -354,24 +359,26 @@
         }
 
         /* Text Layer for PDF highlighting */
-        .text-layer {
+        #pdf-text-layer {
             position: absolute;
             left: 0;
             top: 0;
-            right: 0;
-            bottom: 0;
             overflow: hidden;
-            opacity: 0.2;
+            opacity: 1;
             line-height: 1.0;
             pointer-events: auto;
         }
 
-        .text-layer > span {
+        #pdf-text-layer > span {
             color: transparent;
             position: absolute;
             white-space: pre;
             cursor: text;
             transform-origin: 0% 0%;
+        }
+
+        #pdf-text-layer ::selection {
+            background: rgba(99, 102, 241, 0.3);
         }
 
         /* Highlights */
@@ -589,7 +596,10 @@
                             <div class="spinner"></div>
                             <p>Loading document...</p>
                         </div>
-                        <canvas id="pdf-canvas"></canvas>
+                        <div id="pdf-container" style="display: none;">
+                            <canvas id="pdf-canvas"></canvas>
+                            <div id="pdf-text-layer"></div>
+                        </div>
                         <div id="epub-viewer"></div>
                     </div>
                 </div>
@@ -613,6 +623,7 @@
         let totalPages = 1;
         let pdfDoc = null;
         let epubBook = null;
+        let epubRendition = null;
         let currentZoom = 1.0;
         let highlightMode = false;
         let selectedColor = 'yellow';
@@ -676,7 +687,7 @@
             showLoading(true);
             document.getElementById('upload-section').style.display = 'none';
             document.getElementById('reader-section').style.display = 'flex';
-            document.getElementById('pdf-canvas').style.display = 'block';
+            document.getElementById('pdf-container').style.display = 'block';
             document.getElementById('epub-viewer').style.display = 'none';
 
             const arrayBuffer = await file.arrayBuffer();
@@ -684,7 +695,7 @@
             totalPages = pdfDoc.numPages;
             currentPage = 1;
 
-            renderPDFPage(currentPage);
+            await renderPDFPage(currentPage);
             showLoading(false);
             showNotification('PDF loaded successfully!');
         }
@@ -693,17 +704,37 @@
             const page = await pdfDoc.getPage(pageNum);
             const canvas = document.getElementById('pdf-canvas');
             const context = canvas.getContext('2d');
+            const textLayerDiv = document.getElementById('pdf-text-layer');
+
+            // Clear previous text layer
+            textLayerDiv.innerHTML = '';
+            textLayerDiv.style.display = 'block';
 
             const viewport = page.getViewport({ scale: currentZoom * 1.5 });
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
+            // Set text layer dimensions
+            textLayerDiv.style.width = canvas.width + 'px';
+            textLayerDiv.style.height = canvas.height + 'px';
+
+            // Render PDF page
             const renderContext = {
                 canvasContext: context,
                 viewport: viewport
             };
 
             await page.render(renderContext).promise;
+
+            // Render text layer for selection
+            const textContent = await page.getTextContent();
+            const textLayer = new pdfjsLib.TextLayer({
+                textContentSource: textContent,
+                container: textLayerDiv,
+                viewport: viewport
+            });
+
+            await textLayer.render();
 
             updatePageInfo();
             applyHighlights();
@@ -714,35 +745,53 @@
             showLoading(true);
             document.getElementById('upload-section').style.display = 'none';
             document.getElementById('reader-section').style.display = 'flex';
-            document.getElementById('pdf-canvas').style.display = 'none';
+            document.getElementById('pdf-container').style.display = 'none';
             document.getElementById('epub-viewer').style.display = 'block';
 
-            const arrayBuffer = await file.arrayBuffer();
-            epubBook = ePub(arrayBuffer);
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                epubBook = ePub(arrayBuffer);
 
-            const rendition = epubBook.renderTo("epub-viewer", {
-                width: "100%",
-                height: "100%",
-                spread: "none"
-            });
+                epubRendition = epubBook.renderTo("epub-viewer", {
+                    width: "100%",
+                    height: "100%",
+                    spread: "none",
+                    flow: "paginated"
+                });
 
-            await rendition.display();
+                await epubRendition.display();
 
-            // Enable text selection and highlighting for EPUB
-            rendition.on("rendered", () => {
-                enableEPUBHighlighting(rendition);
-            });
+                // Get total locations
+                epubBook.ready.then(() => {
+                    return epubBook.locations.generate(1024);
+                }).then(() => {
+                    console.log("EPUB locations generated");
+                });
 
-            // Navigation
-            rendition.on("relocated", (location) => {
-                currentPage = location.start.displayed.page;
-                totalPages = location.start.displayed.total;
-                updatePageInfo();
-            });
+                // Enable text selection and highlighting for EPUB
+                epubRendition.on("rendered", () => {
+                    enableEPUBHighlighting(epubRendition);
+                });
 
-            window.rendition = rendition;
-            showLoading(false);
-            showNotification('EPUB loaded successfully!');
+                // Navigation
+                epubRendition.on("relocated", (location) => {
+                    if (location.start) {
+                        currentPage = location.start.displayed.page || 1;
+                        totalPages = location.start.displayed.total || 1;
+                        updatePageInfo();
+                    }
+                });
+
+                // Also store as window.rendition for compatibility
+                window.rendition = epubRendition;
+
+                showLoading(false);
+                showNotification('EPUB loaded successfully!');
+            } catch (error) {
+                console.error('Error loading EPUB:', error);
+                showNotification('Error loading EPUB file: ' + error.message, 'error');
+                showLoading(false);
+            }
         }
 
         function enableEPUBHighlighting(rendition) {
@@ -767,8 +816,8 @@
             if (currentFileType === 'pdf' && currentPage > 1) {
                 currentPage--;
                 renderPDFPage(currentPage);
-            } else if (currentFileType === 'epub' && window.rendition) {
-                window.rendition.prev();
+            } else if (currentFileType === 'epub' && epubRendition) {
+                epubRendition.prev();
             }
         }
 
@@ -776,8 +825,8 @@
             if (currentFileType === 'pdf' && currentPage < totalPages) {
                 currentPage++;
                 renderPDFPage(currentPage);
-            } else if (currentFileType === 'epub' && window.rendition) {
-                window.rendition.next();
+            } else if (currentFileType === 'epub' && epubRendition) {
+                epubRendition.next();
             }
         }
 
@@ -786,6 +835,10 @@
             currentZoom = Math.min(currentZoom + 0.2, 3.0);
             if (currentFileType === 'pdf') {
                 renderPDFPage(currentPage);
+            } else if (currentFileType === 'epub' && epubRendition) {
+                const currentFontSize = parseFloat(getComputedStyle(document.getElementById('epub-viewer')).fontSize) || 16;
+                const newFontSize = currentFontSize * 1.1;
+                epubRendition.themes.fontSize(newFontSize + 'px');
             }
             updateZoomInfo();
         }
@@ -794,6 +847,10 @@
             currentZoom = Math.max(currentZoom - 0.2, 0.5);
             if (currentFileType === 'pdf') {
                 renderPDFPage(currentPage);
+            } else if (currentFileType === 'epub' && epubRendition) {
+                const currentFontSize = parseFloat(getComputedStyle(document.getElementById('epub-viewer')).fontSize) || 16;
+                const newFontSize = currentFontSize * 0.9;
+                epubRendition.themes.fontSize(newFontSize + 'px');
             }
             updateZoomInfo();
         }
@@ -840,40 +897,53 @@
         // Text Selection for PDF
         function enableTextSelection() {
             if (currentFileType === 'pdf') {
-                const canvas = document.getElementById('pdf-canvas');
-                canvas.style.cursor = highlightMode ? 'text' : 'default';
-
-                document.addEventListener('mouseup', handlePDFTextSelection);
+                const textLayer = document.getElementById('pdf-text-layer');
+                textLayer.style.cursor = highlightMode ? 'text' : 'default';
             }
         }
+
+        // Add text selection handler
+        document.addEventListener('mouseup', handlePDFTextSelection);
 
         function handlePDFTextSelection() {
             if (!highlightMode || currentFileType !== 'pdf') return;
 
             const selection = window.getSelection();
-            if (selection.toString().trim().length === 0) return;
+            const selectedText = selection.toString().trim();
 
-            const range = selection.getRangeAt(0);
-            const span = document.createElement('span');
-            span.className = `highlight ${selectedColor}`;
-            span.dataset.page = currentPage;
+            if (selectedText.length === 0) return;
 
             try {
+                const range = selection.getRangeAt(0);
+
+                // Check if selection is within PDF text layer
+                const textLayer = document.getElementById('pdf-text-layer');
+                if (!textLayer.contains(range.commonAncestorContainer)) return;
+
+                // Create highlight span
+                const span = document.createElement('span');
+                span.className = `highlight ${selectedColor}`;
+                span.dataset.page = currentPage;
+                span.dataset.highlightId = `pdf-${currentPage}-${Date.now()}`;
+
+                // Wrap selection
                 range.surroundContents(span);
 
                 // Save highlight
                 const highlightData = {
-                    text: selection.toString(),
+                    text: selectedText,
                     color: selectedColor,
-                    page: currentPage
+                    page: currentPage,
+                    timestamp: Date.now()
                 };
 
-                saveHighlight(`pdf-page-${currentPage}-${Date.now()}`, selectedColor, highlightData);
+                saveHighlight(span.dataset.highlightId, selectedColor, highlightData);
                 showNotification(`Text highlighted in ${selectedColor}!`);
 
                 // Add click handler to remove highlight
                 span.addEventListener('click', function(e) {
                     if (!highlightMode) {
+                        e.stopPropagation();
                         showTooltip(e.pageX, e.pageY, span);
                     }
                 });
@@ -881,7 +951,7 @@
                 selection.removeAllRanges();
             } catch (e) {
                 console.error('Could not apply highlight:', e);
-                showNotification('Could not highlight this text. Try a smaller selection.', 'error');
+                showNotification('Could not highlight this text. Try selecting a smaller portion.', 'error');
             }
         }
 
@@ -905,9 +975,9 @@
         function applyHighlights() {
             // For PDF, highlights are applied through DOM manipulation during text selection
             // For EPUB, highlights are applied through the rendition API
-            if (currentFileType === 'epub' && window.rendition && highlights[currentDocument.name]) {
+            if (currentFileType === 'epub' && epubRendition && highlights[currentDocument.name]) {
                 Object.entries(highlights[currentDocument.name]).forEach(([cfiRange, data]) => {
-                    window.rendition.annotations.highlight(cfiRange, {}, (e) => {}, "highlight-" + data.color, {
+                    epubRendition.annotations.highlight(cfiRange, {}, (e) => {}, "highlight-" + data.color, {
                         "fill": getColorValue(data.color),
                         "fill-opacity": "0.4",
                         "mix-blend-mode": "multiply"
@@ -924,14 +994,17 @@
                     localStorage.setItem('reader-highlights', JSON.stringify(highlights));
                 }
 
-                // Clear visual highlights
-                document.querySelectorAll('.highlight').forEach(el => {
-                    const parent = el.parentNode;
-                    parent.replaceChild(document.createTextNode(el.textContent), el);
-                });
+                // Clear visual highlights from PDF
+                if (currentFileType === 'pdf') {
+                    document.querySelectorAll('#pdf-text-layer .highlight').forEach(el => {
+                        const parent = el.parentNode;
+                        parent.replaceChild(document.createTextNode(el.textContent), el);
+                    });
+                }
 
-                if (currentFileType === 'epub' && window.rendition) {
-                    window.rendition.annotations.remove();
+                // Clear EPUB highlights
+                if (currentFileType === 'epub' && epubRendition) {
+                    epubRendition.annotations.remove();
                 }
 
                 showNotification('All highlights cleared!');
@@ -1001,10 +1074,18 @@
             currentZoom = 1.0;
             highlightMode = false;
 
+            // Clean up EPUB rendition
+            if (epubRendition) {
+                epubRendition.destroy();
+                epubRendition = null;
+            }
             if (window.rendition) {
                 window.rendition.destroy();
                 window.rendition = null;
             }
+
+            // Clear PDF text layer
+            document.getElementById('pdf-text-layer').innerHTML = '';
         }
 
         // Keyboard shortcuts
