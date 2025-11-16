@@ -1,0 +1,27 @@
+[package]
+name = "forge_api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+forge_engine = { path = "../forge_engine" }
+forge_models = { path = "../forge_models" }
+forge_runtime = { path = "../forge_runtime" }
+forge_store = { path = "../forge_store" }
+
+[dev-dependencies]
+tokio-test = { workspace = true }

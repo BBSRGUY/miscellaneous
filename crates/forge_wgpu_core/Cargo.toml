@@ -1,0 +1,17 @@
+[package]
+name = "forge_wgpu_core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tokio-test = { workspace = true }

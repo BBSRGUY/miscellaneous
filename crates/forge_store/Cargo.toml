@@ -1,0 +1,25 @@
+[package]
+name = "forge_store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+
+forge_models = { path = "../forge_models" }
+forge_runtime = { path = "../forge_runtime" }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tempfile = { workspace = true }
