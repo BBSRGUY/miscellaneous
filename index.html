@@ -417,6 +417,11 @@
             text-align: center;
             padding: 2rem;
             color: var(--text-muted);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
         }
 
         .spinner {
@@ -708,17 +713,16 @@
 
             // Clear previous text layer
             textLayerDiv.innerHTML = '';
-            textLayerDiv.style.display = 'block';
 
             const viewport = page.getViewport({ scale: currentZoom * 1.5 });
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
-            // Set text layer dimensions
+            // Set text layer dimensions to match canvas
             textLayerDiv.style.width = canvas.width + 'px';
             textLayerDiv.style.height = canvas.height + 'px';
 
-            // Render PDF page
+            // Render PDF page to canvas
             const renderContext = {
                 canvasContext: context,
                 viewport: viewport
@@ -726,18 +730,33 @@
 
             await page.render(renderContext).promise;
 
-            // Render text layer for selection
+            // Render selectable text layer
             const textContent = await page.getTextContent();
-            const textLayer = new pdfjsLib.TextLayer({
-                textContentSource: textContent,
-                container: textLayerDiv,
-                viewport: viewport
+
+            textContent.items.forEach((item) => {
+                if (!item.str) return;
+
+                const span = document.createElement('span');
+                span.textContent = item.str;
+
+                // Calculate position and size
+                const tx = viewport.transform;
+                const [x, y] = pdfjsLib.Util.applyTransform([item.transform[4], item.transform[5]], tx);
+                const fontSize = Math.sqrt(item.transform[2] * item.transform[2] + item.transform[3] * item.transform[3]);
+                const scaledFontSize = fontSize * viewport.scale;
+
+                span.style.position = 'absolute';
+                span.style.left = x + 'px';
+                span.style.top = (y - scaledFontSize) + 'px';
+                span.style.fontSize = scaledFontSize + 'px';
+                span.style.color = 'transparent';
+                span.style.whiteSpace = 'pre';
+                span.style.transformOrigin = '0% 0%';
+
+                textLayerDiv.appendChild(span);
             });
 
-            await textLayer.render();
-
             updatePageInfo();
-            applyHighlights();
         }
 
         // EPUB Loading and Rendering
