@@ -17,7 +17,6 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 async-trait = { workspace = true }
 
-forge_models = { path = "../forge_models" }
 forge_runtime = { path = "../forge_runtime" }
 
 [dev-dependencies]

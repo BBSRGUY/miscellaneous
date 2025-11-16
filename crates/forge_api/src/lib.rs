@@ -67,25 +67,23 @@ pub type ApiResult<T> = std::result::Result<T, ApiError>;
 /// Shared application state.
 #[derive(Clone)]
 pub struct AppState {
+    pub store: Arc<forge_store::Store>,
     pub model_registry: Arc<forge_models::ModelRegistry>,
     pub session_manager: Arc<forge_runtime::SessionManager>,
     pub task_scheduler: Arc<forge_runtime::TaskScheduler>,
 }
 
 impl AppState {
-    /// Create new application state.
-    pub fn new() -> Self {
-        Self {
-            model_registry: Arc::new(forge_models::ModelRegistry::new()),
+    /// Create new application state with in-memory database.
+    pub async fn new() -> anyhow::Result<Self> {
+        let store = Arc::new(forge_store::Store::new_in_memory().await?);
+
+        Ok(Self {
+            store: store.clone(),
+            model_registry: Arc::new(forge_models::ModelRegistry::new(store)),
             session_manager: Arc::new(forge_runtime::SessionManager::new()),
             task_scheduler: Arc::new(forge_runtime::TaskScheduler::new()),
-        }
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
+        })
     }
 }
 
@@ -114,7 +112,7 @@ pub struct StatusResponse {
 
 /// Status handler.
 async fn status_handler(State(state): State<AppState>) -> Json<StatusResponse> {
-    let models = state.model_registry.list();
+    let models = state.model_registry.list_models().await.unwrap_or_default();
     let sessions = state.session_manager.list_sessions();
 
     Json(StatusResponse {
@@ -127,8 +125,8 @@ async fn status_handler(State(state): State<AppState>) -> Json<StatusResponse> {
 /// List models handler.
 async fn list_models_handler(
     State(state): State<AppState>,
-) -> Json<Vec<forge_models::ModelEntry>> {
-    let models = state.model_registry.list();
+) -> Json<Vec<forge_models::ModelInfo>> {
+    let models = state.model_registry.list_models().await.unwrap_or_default();
     Json(models)
 }
 
@@ -155,7 +153,7 @@ pub fn create_router(state: AppState) -> Router {
 pub async fn serve(port: u16) -> anyhow::Result<()> {
     info!("Initializing Forge API server");
 
-    let state = AppState::new();
+    let state = AppState::new().await?;
     info!("Application state initialized");
 
     let app = create_router(state);
@@ -182,10 +180,11 @@ pub async fn serve(port: u16) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_app_state_creation() {
-        let state = AppState::new();
-        assert_eq!(state.model_registry.list().len(), 0);
+    #[tokio::test]
+    async fn test_app_state_creation() {
+        let state = AppState::new().await.unwrap();
+        let models = state.model_registry.list_models().await.unwrap();
+        assert_eq!(models.len(), 0);
         assert_eq!(state.session_manager.list_sessions().len(), 0);
     }
 }

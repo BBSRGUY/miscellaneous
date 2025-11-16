@@ -15,6 +15,8 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 parking_lot = { workspace = true }
+forge_store = { path = "../forge_store" }
+forge_engine = { path = "../forge_engine" }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

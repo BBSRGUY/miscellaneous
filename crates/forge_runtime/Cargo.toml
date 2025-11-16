@@ -21,8 +21,5 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
 
-forge_engine = { path = "../forge_engine" }
-forge_models = { path = "../forge_models" }
-
 [dev-dependencies]
 tokio-test = { workspace = true }
