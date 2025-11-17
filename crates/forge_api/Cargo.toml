@@ -17,6 +17,8 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+futures = { workspace = true }
+async-stream = { workspace = true }
 
 forge_engine = { path = "../forge_engine" }
 forge_models = { path = "../forge_models" }
@@ -25,3 +27,5 @@ forge_store = { path = "../forge_store" }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+reqwest = { workspace = true }
+tempfile = { workspace = true }

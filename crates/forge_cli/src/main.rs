@@ -105,7 +105,25 @@ async fn main() -> anyhow::Result<()> {
             info!("Database path: {}", config.db_path().display());
             info!("Models directory: {}", config.models_path().display());
 
-            forge_api::serve(config.api.port).await?;
+            // Initialize runtime components
+            use std::sync::Arc;
+            use forge_store::Store;
+            use forge_engine::Engine;
+            use forge_models::ModelRegistry;
+            use forge_runtime::Runtime;
+
+            let db_path = config.db_path();
+            let blob_storage = config.storage.data_dir.join("blobs");
+            let store = Arc::new(Store::new_with_file(&db_path, &blob_storage).await?);
+
+            // TODO: Initialize proper backend based on config
+            // For now, use echo backend as placeholder
+            let backend = Arc::new(forge_engine::EchoBackend::new());
+            let engine = Arc::new(Engine::new(backend));
+            let models = Arc::new(ModelRegistry::with_engine(store.clone(), engine.clone()));
+            let runtime = Arc::new(Runtime::new(store, models, engine));
+
+            forge_api::run_http_server(runtime, &config.api.host, config.api.port).await?;
         }
         Commands::Models => {
             info!("Listing models from: {}", config.models_path().display());
