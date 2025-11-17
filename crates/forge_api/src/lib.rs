@@ -70,7 +70,7 @@ pub struct AppState {
     pub store: Arc<forge_store::Store>,
     pub model_registry: Arc<forge_models::ModelRegistry>,
     pub session_manager: Arc<forge_runtime::SessionManager>,
-    pub task_scheduler: Arc<forge_runtime::TaskScheduler>,
+    pub scheduler: Arc<forge_runtime::Scheduler>,
 }
 
 impl AppState {
@@ -80,9 +80,9 @@ impl AppState {
 
         Ok(Self {
             store: store.clone(),
-            model_registry: Arc::new(forge_models::ModelRegistry::new(store)),
-            session_manager: Arc::new(forge_runtime::SessionManager::new()),
-            task_scheduler: Arc::new(forge_runtime::TaskScheduler::new()),
+            model_registry: Arc::new(forge_models::ModelRegistry::new(store.clone())),
+            session_manager: Arc::new(forge_runtime::SessionManager::new(store)),
+            scheduler: Arc::new(forge_runtime::Scheduler::new()),
         })
     }
 }
@@ -113,7 +113,7 @@ pub struct StatusResponse {
 /// Status handler.
 async fn status_handler(State(state): State<AppState>) -> Json<StatusResponse> {
     let models = state.model_registry.list_models().await.unwrap_or_default();
-    let sessions = state.session_manager.list_sessions();
+    let sessions = state.session_manager.list_sessions().await.unwrap_or_default();
 
     Json(StatusResponse {
         models_loaded: models.len(),
@@ -134,7 +134,7 @@ async fn list_models_handler(
 async fn list_sessions_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<forge_runtime::Session>> {
-    let sessions = state.session_manager.list_sessions();
+    let sessions = state.session_manager.list_sessions().await.unwrap_or_default();
     Json(sessions)
 }
 
@@ -184,7 +184,8 @@ mod tests {
     async fn test_app_state_creation() {
         let state = AppState::new().await.unwrap();
         let models = state.model_registry.list_models().await.unwrap();
+        let sessions = state.session_manager.list_sessions().await.unwrap();
         assert_eq!(models.len(), 0);
-        assert_eq!(state.session_manager.list_sessions().len(), 0);
+        assert_eq!(sessions.len(), 0);
     }
 }
