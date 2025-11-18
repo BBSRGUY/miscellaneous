@@ -5,6 +5,7 @@
 use crate::scheduler::{Scheduler, SchedulerError};
 use crate::sessions::{MessageRole, SessionManager};
 use crate::tasks::{JobStatus, TaskPriority, TaskType};
+use crate::training_jobs::TrainingJobManager;
 use forge_engine::{Engine, InferenceRequest, InferenceStream, TrainBatch, TrainConfig};
 use forge_models::{ModelRegistry, RegisterModelRequest};
 use forge_store::Store;
@@ -59,6 +60,7 @@ pub struct Runtime {
     engine: Arc<Engine>,
     sessions: Arc<SessionManager>,
     scheduler: Arc<Scheduler>,
+    training_jobs: Arc<TrainingJobManager>,
 }
 
 impl Runtime {
@@ -70,6 +72,7 @@ impl Runtime {
     ) -> Self {
         let sessions = Arc::new(SessionManager::new(store.clone()));
         let scheduler = Arc::new(Scheduler::new());
+        let training_jobs = Arc::new(TrainingJobManager::new());
 
         Self {
             store,
@@ -77,6 +80,7 @@ impl Runtime {
             engine,
             sessions,
             scheduler,
+            training_jobs,
         }
     }
 
@@ -279,6 +283,77 @@ impl Runtime {
         info!("Model registered: {}", model_id);
 
         Ok(model_id)
+    }
+
+    // ========================================================================
+    // Training Job Methods
+    // ========================================================================
+
+    /// Create a new training job.
+    pub fn create_training_job(&self, config: forge_engine::TrainConfig) -> Result<String> {
+        info!("Creating training job");
+
+        let job_id = self.training_jobs
+            .create_job(config)
+            .map_err(|e| RuntimeError::InvalidRequest(e.to_string()))?;
+
+        info!("Created training job: {}", job_id);
+
+        Ok(job_id)
+    }
+
+    /// Start a training job.
+    pub async fn start_training_job(&self, job_id: &str) -> Result<()> {
+        info!("Starting training job: {}", job_id);
+
+        self.training_jobs
+            .start_job(job_id)
+            .await
+            .map_err(|e| RuntimeError::InvalidRequest(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get a training job by ID.
+    pub fn get_training_job(&self, job_id: &str) -> Result<forge_engine::TrainingJob> {
+        self.training_jobs
+            .get_job(job_id)
+            .map_err(|e| RuntimeError::TaskNotFound(job_id.to_string()))
+    }
+
+    /// List all training jobs.
+    pub fn list_training_jobs(&self) -> Vec<forge_engine::TrainingJob> {
+        self.training_jobs.list_jobs()
+    }
+
+    /// Cancel a training job.
+    pub async fn cancel_training_job(&self, job_id: &str) -> Result<()> {
+        info!("Cancelling training job: {}", job_id);
+
+        self.training_jobs
+            .cancel_job(job_id)
+            .await
+            .map_err(|e| RuntimeError::InvalidRequest(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Delete a training job.
+    pub fn delete_training_job(&self, job_id: &str) -> Result<()> {
+        info!("Deleting training job: {}", job_id);
+
+        self.training_jobs
+            .delete_job(job_id)
+            .map_err(|e| RuntimeError::InvalidRequest(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get logs for a training job.
+    pub fn get_training_logs(&self, job_id: &str) -> Result<Vec<String>> {
+        self.training_jobs
+            .get_logs(job_id)
+            .map_err(|e| RuntimeError::TaskNotFound(job_id.to_string()))
     }
 
     /// Shutdown the runtime.

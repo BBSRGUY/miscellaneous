@@ -196,6 +196,35 @@ pub struct WebGpuRegisterResponse {
     pub message: String,
 }
 
+/// Training job creation request.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateTrainingJobRequest {
+    pub base_model_id: String,
+    pub dataset_path: String,
+    pub method: String, // "full", "lora", "qlora"
+    pub num_epochs: Option<usize>,
+    pub batch_size: Option<usize>,
+    pub learning_rate: Option<f32>,
+    pub lora_rank: Option<usize>,
+    pub lora_alpha: Option<f32>,
+    pub max_steps: Option<usize>,
+}
+
+/// Training job response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrainingJobResponse {
+    pub id: String,
+    pub state: String,
+    pub current_step: usize,
+    pub total_steps: usize,
+    pub progress: f32,
+    pub latest_metrics: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -494,6 +523,145 @@ async fn webgpu_register_handler(
     }))
 }
 
+/// Create a training job.
+#[tracing::instrument(skip(runtime))]
+async fn create_training_job_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Json(request): Json<CreateTrainingJobRequest>,
+) -> ApiResult<Json<TrainingJobResponse>> {
+    info!("Creating training job for model: {}", request.base_model_id);
+
+    // Convert request to TrainConfig
+    use forge_engine::{TrainConfig, TrainingMethod, LoRAConfig, OptimizerConfig, LRSchedulerConfig};
+    use std::path::PathBuf;
+
+    let method = match request.method.as_str() {
+        "full" => TrainingMethod::FullFinetune,
+        "lora" => TrainingMethod::LoRA,
+        "qlora" => TrainingMethod::QLoRA,
+        _ => return Err(ApiError::InvalidRequest(format!("Invalid training method: {}", request.method))),
+    };
+
+    let lora_config = if matches!(method, TrainingMethod::LoRA | TrainingMethod::QLoRA) {
+        Some(LoRAConfig {
+            rank: request.lora_rank.unwrap_or(8),
+            alpha: request.lora_alpha.unwrap_or(16.0),
+            dropout: 0.1,
+            target_modules: vec!["q_proj".to_string(), "v_proj".to_string()],
+        })
+    } else {
+        None
+    };
+
+    let mut config = TrainConfig {
+        base_model_id: request.base_model_id.clone(),
+        dataset_path: PathBuf::from(request.dataset_path),
+        method,
+        num_epochs: request.num_epochs.unwrap_or(3),
+        batch_size: request.batch_size.unwrap_or(4),
+        max_seq_length: 512,
+        gradient_accumulation_steps: 1,
+        optimizer: OptimizerConfig::AdamW {
+            learning_rate: request.learning_rate.unwrap_or(2e-4),
+            weight_decay: 0.01,
+            beta1: 0.9,
+            beta2: 0.999,
+        },
+        lr_scheduler: LRSchedulerConfig::CosineWithWarmup { warmup_steps: 100 },
+        lora_config,
+        output_dir: PathBuf::from(format!("./checkpoints/{}", request.base_model_id)),
+        save_steps: 500,
+        logging_steps: 10,
+        eval_steps: Some(100),
+        max_steps: request.max_steps,
+        seed: 42,
+        fp16: false,
+        gradient_checkpointing: false,
+    };
+
+    // Create job
+    let job_id = runtime.create_training_job(config)?;
+
+    // Get the created job
+    let job = runtime.get_training_job(&job_id)?;
+
+    // Start the job automatically
+    runtime.start_training_job(&job_id).await?;
+
+    Ok(Json(training_job_to_response(job)))
+}
+
+/// Get a training job by ID.
+#[tracing::instrument(skip(runtime))]
+async fn get_training_job_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Path(job_id): Path<String>,
+) -> ApiResult<Json<TrainingJobResponse>> {
+    debug!("Getting training job: {}", job_id);
+
+    let job = runtime.get_training_job(&job_id)?;
+
+    Ok(Json(training_job_to_response(job)))
+}
+
+/// List all training jobs.
+#[tracing::instrument(skip(runtime))]
+async fn list_training_jobs_handler(
+    State(runtime): State<Arc<Runtime>>,
+) -> ApiResult<Json<Vec<TrainingJobResponse>>> {
+    debug!("Listing training jobs");
+
+    let jobs = runtime.list_training_jobs();
+    let responses = jobs.into_iter().map(training_job_to_response).collect();
+
+    Ok(Json(responses))
+}
+
+/// Cancel a training job.
+#[tracing::instrument(skip(runtime))]
+async fn cancel_training_job_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Path(job_id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    info!("Cancelling training job: {}", job_id);
+
+    runtime.cancel_training_job(&job_id).await?;
+
+    Ok(Json(serde_json::json!({
+        "message": "Training job cancelled successfully",
+        "job_id": job_id
+    })))
+}
+
+/// Get logs for a training job.
+#[tracing::instrument(skip(runtime))]
+async fn get_training_logs_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Path(job_id): Path<String>,
+) -> ApiResult<Json<Vec<String>>> {
+    debug!("Getting logs for training job: {}", job_id);
+
+    let logs = runtime.get_training_logs(&job_id)?;
+
+    Ok(Json(logs))
+}
+
+/// Helper to convert TrainingJob to TrainingJobResponse.
+fn training_job_to_response(job: forge_engine::TrainingJob) -> TrainingJobResponse {
+    TrainingJobResponse {
+        id: job.id,
+        state: format!("{:?}", job.state),
+        current_step: job.current_step,
+        total_steps: job.total_steps,
+        progress: job.progress(),
+        latest_metrics: job.latest_metrics.map(|m| serde_json::to_value(m).unwrap()),
+        error: job.error,
+        created_at: job.created_at.to_rfc3339(),
+        started_at: job.started_at.map(|t| t.to_rfc3339()),
+        completed_at: job.completed_at.map(|t| t.to_rfc3339()),
+    }
+}
+
 // ============================================================================
 // Router Setup
 // ============================================================================
@@ -510,6 +678,10 @@ pub fn create_api_router(runtime: Arc<Runtime>) -> Router {
         .route("/jobs", get(list_jobs_handler))
         .route("/jobs/:id", get(get_job_handler))
         .route("/webgpu/register", post(webgpu_register_handler))
+        .route("/train/jobs", post(create_training_job_handler).get(list_training_jobs_handler))
+        .route("/train/jobs/:id", get(get_training_job_handler))
+        .route("/train/jobs/:id/cancel", post(cancel_training_job_handler))
+        .route("/train/jobs/:id/logs", get(get_training_logs_handler))
         .with_state(runtime);
 
     Router::new()
