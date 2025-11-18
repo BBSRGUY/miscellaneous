@@ -22,6 +22,8 @@ from rich.table import Table
 from rich.text import Text
 
 from ganita import __version__
+from ganita.auto_discovery import AutoDiscovery
+from ganita.checkpoint import ExplorationCheckpoint
 from ganita.models import ModuleConfig, RunConfig
 from ganita.orchestrator import run_exploration
 from ganita.storage.db import Database
@@ -305,6 +307,182 @@ def _get_stage_style(stage: str) -> str:
         "novel_candidate": "cyan bold",
     }
     return styles.get(stage, "white")
+
+
+@cli.command()
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default="config.yaml",
+    help="Configuration file path",
+)
+@click.option(
+    "--db",
+    type=click.Path(path_type=Path),
+    default="ganita_data/math_discovery.db",
+    help="Database path",
+)
+@click.option(
+    "--artifacts",
+    type=click.Path(path_type=Path),
+    default="ganita_data/artifacts",
+    help="Artifacts directory",
+)
+@click.option(
+    "--checkpoint",
+    type=click.Path(path_type=Path),
+    default="ganita_data/checkpoint.json",
+    help="Checkpoint file path",
+)
+@click.option(
+    "--max-iterations",
+    "-n",
+    type=int,
+    default=None,
+    help="Maximum iterations (default: unlimited)",
+)
+@click.option(
+    "--reset",
+    is_flag=True,
+    help="Reset checkpoint and start fresh",
+)
+def auto(
+    config: Path, db: Path, artifacts: Path, checkpoint: Path, max_iterations: int | None, reset: bool
+) -> None:
+    """
+    Run continuous auto-discovery mode.
+
+    Explores parameter space indefinitely, resuming from checkpoint.
+    Press Ctrl+C to stop gracefully.
+    """
+    console.print(
+        Panel.fit(
+            "[bold magenta]Ganit-A Auto-Discovery Mode[/bold magenta]\n"
+            "[dim]Continuous exploration with checkpointing[/dim]",
+            border_style="magenta",
+        )
+    )
+
+    # Load configuration
+    if config.exists():
+        with open(config) as f:
+            config_dict = yaml.safe_load(f)
+        run_config = RunConfig.model_validate(config_dict)
+    else:
+        console.print(f"[yellow]Config file not found, using defaults[/yellow]")
+        run_config = _create_default_config()
+
+    # Handle reset
+    if reset:
+        if checkpoint.exists():
+            checkpoint.unlink()
+        console.print("[yellow]Checkpoint reset[/yellow]")
+
+    # Show configuration
+    console.print(f"\n[bold]Configuration:[/bold]")
+    console.print(f"  Database: {db}")
+    console.print(f"  Checkpoint: {checkpoint}")
+    console.print(f"  Max iterations: {max_iterations or 'Unlimited'}")
+
+    # Check if resuming
+    if checkpoint.exists() and not reset:
+        ckpt = ExplorationCheckpoint(checkpoint)
+        progress = ckpt.get_progress()
+        console.print(f"\n[bold cyan]Resuming from checkpoint:[/bold cyan]")
+        console.print(f"  Total discoveries: {progress['total_discoveries']}")
+        console.print(f"  Total iterations: {progress['total_iterations']}")
+        console.print(f"  Status: {progress['status']}")
+
+    console.print(
+        "\n[bold green]Starting auto-discovery...[/bold green] (Press Ctrl+C to stop gracefully)"
+    )
+
+    # Create auto-discovery instance
+    auto_discovery = AutoDiscovery(run_config, db, artifacts, checkpoint)
+
+    # Start
+    try:
+        auto_discovery.start(continuous=True, max_iterations=max_iterations)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted by user[/yellow]")
+    finally:
+        console.print("\n[bold]Auto-discovery stopped.[/bold]")
+        console.print(f"Checkpoint saved to: {checkpoint}")
+        console.print("Run the same command to resume.")
+
+
+@cli.command()
+@click.option(
+    "--checkpoint",
+    type=click.Path(exists=True, path_type=Path),
+    default="ganita_data/checkpoint.json",
+    help="Checkpoint file path",
+)
+def checkpoint_status(checkpoint: Path) -> None:
+    """Show checkpoint status and progress."""
+    if not checkpoint.exists():
+        console.print(f"[yellow]No checkpoint found at {checkpoint}[/yellow]")
+        return
+
+    ckpt = ExplorationCheckpoint(checkpoint)
+    progress = ckpt.get_progress()
+
+    console.print(Panel.fit("[bold cyan]Checkpoint Status[/bold cyan]", border_style="cyan"))
+
+    # Overall stats
+    table = Table(show_header=False, border_style="cyan")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Status", progress["status"])
+    table.add_row("Total Discoveries", str(progress["total_discoveries"]))
+    table.add_row("Total Iterations", str(progress["total_iterations"]))
+    table.add_row("Last Updated", progress["last_updated"])
+
+    console.print(table)
+
+    # Module progress
+    if progress["modules"]:
+        console.print("\n[bold]Module Progress:[/bold]")
+        mod_table = Table(border_style="cyan")
+        mod_table.add_column("Module", style="cyan")
+        mod_table.add_column("Discoveries", justify="right")
+        mod_table.add_column("Iterations", justify="right")
+        mod_table.add_column("Explored", justify="right")
+        mod_table.add_column("Status", style="green")
+
+        for name, mod_progress in progress["modules"].items():
+            mod_table.add_row(
+                name,
+                str(mod_progress["discoveries"]),
+                str(mod_progress["iterations"]),
+                str(mod_progress["explored_count"]),
+                mod_progress["status"],
+            )
+
+        console.print(mod_table)
+
+    # Export summary
+    summary = ckpt.export_summary()
+    console.print("\n[dim]Full summary exported to checkpoint.summary.txt[/dim]")
+
+
+@cli.command()
+@click.option(
+    "--checkpoint",
+    type=click.Path(exists=True, path_type=Path),
+    default="ganita_data/checkpoint.json",
+    help="Checkpoint file path",
+)
+@click.confirmation_option(prompt="Are you sure you want to reset the checkpoint?")
+def checkpoint_reset(checkpoint: Path) -> None:
+    """Reset checkpoint (start fresh)."""
+    if checkpoint.exists():
+        checkpoint.unlink()
+        console.print(f"[green]✓[/green] Checkpoint reset: {checkpoint}")
+    else:
+        console.print(f"[yellow]No checkpoint found at {checkpoint}[/yellow]")
 
 
 def _create_default_config() -> RunConfig:

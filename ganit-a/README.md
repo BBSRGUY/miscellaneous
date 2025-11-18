@@ -104,6 +104,24 @@ ganit-a run --config my_config.yaml
 ganit-a run --db my_discoveries.db --artifacts my_artifacts/
 ```
 
+#### **NEW: Auto-Discovery Mode** 🔥
+
+Run **continuously** with checkpoint/resume:
+
+```bash
+# Start auto-discovery (runs until you stop it)
+ganit-a auto
+
+# Stop anytime with Ctrl+C, resume later:
+ganit-a auto  # Continues from where it left off!
+
+# Check progress
+ganit-a checkpoint-status
+
+# See full documentation
+cat AUTO_DISCOVERY.md
+```
+
 #### View Discoveries
 
 ```bash

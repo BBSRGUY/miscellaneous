@@ -19,6 +19,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ganita import __version__
+from ganita.auto_discovery import AutoDiscovery
+from ganita.checkpoint import ExplorationCheckpoint
 from ganita.models import ModuleConfig, RunConfig
 from ganita.orchestrator import Orchestrator
 from ganita.storage.db import Database
@@ -44,7 +46,10 @@ app.add_middleware(
 # Global state
 db_path = Path("ganita_data/math_discovery.db")
 artifacts_path = Path("ganita_data/artifacts")
+checkpoint_path = Path("ganita_data/checkpoint.json")
 active_runs: dict[int, Orchestrator] = {}
+auto_discovery_task: asyncio.Task | None = None
+auto_discovery_instance: AutoDiscovery | None = None
 ws_clients: list[WebSocket] = []
 
 
@@ -244,6 +249,157 @@ async def get_discovery_trace(discovery_id: int) -> list[dict[str, Any]]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Auto-Discovery Endpoints
+
+
+@app.post("/auto-discovery/start")
+async def start_auto_discovery(request: RunRequest) -> dict[str, Any]:
+    """Start continuous auto-discovery mode."""
+    global auto_discovery_task, auto_discovery_instance
+
+    if auto_discovery_task and not auto_discovery_task.done():
+        raise HTTPException(status_code=400, detail="Auto-discovery already running")
+
+    # Create configuration
+    modules = []
+    for mod_dict in request.modules:
+        modules.append(ModuleConfig.model_validate(mod_dict))
+
+    if not modules:
+        modules = [
+            ModuleConfig(name="series_products", enabled=True, budget_minutes=10.0),
+            ModuleConfig(name="continued_fractions", enabled=True, budget_minutes=10.0),
+            ModuleConfig(name="fixed_points", enabled=True, budget_minutes=10.0),
+        ]
+
+    config = RunConfig(
+        target_precision_digits=request.target_precision_digits,
+        wallclock_limit_minutes=request.wallclock_limit_minutes,
+        random_seed=request.random_seed,
+        max_workers=request.max_workers,
+        modules=modules,
+    )
+
+    # Create auto-discovery instance
+    auto_discovery_instance = AutoDiscovery(config, db_path, artifacts_path, checkpoint_path)
+
+    # Start in background
+    auto_discovery_task = asyncio.create_task(_run_auto_discovery_background())
+
+    await _broadcast_ws({"type": "auto_discovery_started", "message": "Auto-discovery started"})
+
+    return {
+        "status": "started",
+        "message": "Auto-discovery started in background",
+    }
+
+
+@app.post("/auto-discovery/stop")
+async def stop_auto_discovery() -> dict[str, Any]:
+    """Stop auto-discovery gracefully."""
+    global auto_discovery_task, auto_discovery_instance
+
+    if not auto_discovery_instance or not auto_discovery_task:
+        raise HTTPException(status_code=400, detail="Auto-discovery not running")
+
+    auto_discovery_instance.stop()
+
+    await _broadcast_ws({"type": "auto_discovery_stopping", "message": "Auto-discovery stopping..."})
+
+    return {
+        "status": "stopping",
+        "message": "Auto-discovery stopping gracefully",
+    }
+
+
+@app.post("/auto-discovery/pause")
+async def pause_auto_discovery() -> dict[str, Any]:
+    """Pause auto-discovery."""
+    global auto_discovery_instance
+
+    if not auto_discovery_instance:
+        raise HTTPException(status_code=400, detail="Auto-discovery not running")
+
+    auto_discovery_instance.pause()
+
+    await _broadcast_ws({"type": "auto_discovery_paused", "message": "Auto-discovery paused"})
+
+    return {
+        "status": "paused",
+        "message": "Auto-discovery paused",
+    }
+
+
+@app.post("/auto-discovery/resume")
+async def resume_auto_discovery() -> dict[str, Any]:
+    """Resume auto-discovery."""
+    global auto_discovery_instance
+
+    if not auto_discovery_instance:
+        raise HTTPException(status_code=400, detail="Auto-discovery not running")
+
+    auto_discovery_instance.resume()
+
+    await _broadcast_ws({"type": "auto_discovery_resumed", "message": "Auto-discovery resumed"})
+
+    return {
+        "status": "running",
+        "message": "Auto-discovery resumed",
+    }
+
+
+@app.get("/auto-discovery/status")
+async def get_auto_discovery_status() -> dict[str, Any]:
+    """Get auto-discovery status."""
+    global auto_discovery_task, auto_discovery_instance
+
+    if not auto_discovery_instance:
+        # Check checkpoint
+        if checkpoint_path.exists():
+            ckpt = ExplorationCheckpoint(checkpoint_path)
+            progress = ckpt.get_progress()
+            return {
+                "running": False,
+                "checkpoint_exists": True,
+                "progress": progress,
+            }
+        return {
+            "running": False,
+            "checkpoint_exists": False,
+        }
+
+    running = auto_discovery_task and not auto_discovery_task.done()
+
+    # Get checkpoint progress
+    ckpt = ExplorationCheckpoint(checkpoint_path)
+    progress = ckpt.get_progress()
+
+    return {
+        "running": running,
+        "paused": auto_discovery_instance.paused if auto_discovery_instance else False,
+        "progress": progress,
+        "session_stats": auto_discovery_instance.stats if auto_discovery_instance else {},
+    }
+
+
+@app.post("/checkpoint/reset")
+async def reset_checkpoint() -> dict[str, Any]:
+    """Reset checkpoint."""
+    if checkpoint_path.exists():
+        ckpt = ExplorationCheckpoint(checkpoint_path)
+        ckpt.reset()
+
+        return {
+            "status": "reset",
+            "message": "Checkpoint reset successfully",
+        }
+
+    return {
+        "status": "no_checkpoint",
+        "message": "No checkpoint found",
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time updates."""
@@ -281,6 +437,53 @@ async def _run_exploration_background(orchestrator: Orchestrator) -> None:
     except Exception as e:
         logger.error(f"Background run failed: {e}", exc_info=True)
         await _broadcast_ws({"type": "run_error", "error": str(e)})
+
+
+async def _run_auto_discovery_background() -> None:
+    """Run auto-discovery in background with progress updates."""
+    global auto_discovery_instance
+
+    try:
+        if not auto_discovery_instance:
+            return
+
+        # Send periodic progress updates
+        async def send_progress():
+            while auto_discovery_instance and auto_discovery_instance.running:
+                ckpt = ExplorationCheckpoint(checkpoint_path)
+                progress = ckpt.get_progress()
+
+                await _broadcast_ws({
+                    "type": "auto_discovery_progress",
+                    "progress": progress,
+                    "session_stats": auto_discovery_instance.stats,
+                })
+
+                await asyncio.sleep(5)  # Update every 5 seconds
+
+        # Start progress task
+        progress_task = asyncio.create_task(send_progress())
+
+        # Run auto-discovery in thread pool (it's blocking)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, auto_discovery_instance.start, True, None)
+
+        # Cancel progress task
+        progress_task.cancel()
+
+        # Final update
+        ckpt = ExplorationCheckpoint(checkpoint_path)
+        progress = ckpt.get_progress()
+
+        await _broadcast_ws({
+            "type": "auto_discovery_stopped",
+            "progress": progress,
+            "session_stats": auto_discovery_instance.stats,
+        })
+
+    except Exception as e:
+        logger.error(f"Auto-discovery failed: {e}", exc_info=True)
+        await _broadcast_ws({"type": "auto_discovery_error", "error": str(e)})
 
 
 async def _broadcast_ws(message: dict[str, Any]) -> None:
