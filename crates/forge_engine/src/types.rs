@@ -336,4 +336,123 @@ mod tests {
         assert_eq!(params.temperature, 0.7);
         assert_eq!(params.top_p, 0.9);
     }
+
+    #[test]
+    fn test_train_config_default() {
+        let config = TrainConfig::default();
+        assert_eq!(config.learning_rate, 1e-4);
+        assert_eq!(config.batch_size, 1);
+        assert_eq!(config.epochs, 1);
+        assert_eq!(config.lora_rank, Some(8));
+        assert_eq!(config.lora_alpha, Some(16.0));
+    }
+
+    #[test]
+    fn test_train_batch_creation() {
+        let batch = TrainBatch {
+            inputs: vec![vec![1, 2, 3], vec![4, 5, 6]],
+            targets: vec![vec![2, 3, 4], vec![5, 6, 7]],
+            masks: Some(vec![vec![true, true, true], vec![true, true, true]]),
+        };
+
+        assert_eq!(batch.inputs.len(), 2);
+        assert_eq!(batch.targets.len(), 2);
+        assert!(batch.masks.is_some());
+    }
+
+    #[test]
+    fn test_model_handle_creation() {
+        let handle = ModelHandle::new(
+            "model-1".to_string(),
+            "Test Model".to_string(),
+            "echo".to_string(),
+        );
+
+        assert_eq!(handle.id, "model-1");
+        assert_eq!(handle.name, "Test Model");
+        assert_eq!(handle.backend, "echo");
+    }
+
+    #[test]
+    fn test_token_with_logprob() {
+        let token = Token {
+            id: 123,
+            text: "hello".to_string(),
+            logprob: Some(-1.5),
+        };
+
+        assert_eq!(token.id, 123);
+        assert_eq!(token.text, "hello");
+        assert!(token.logprob.is_some());
+    }
+
+    #[test]
+    fn test_inference_chunk_with_finish_reason() {
+        let chunk = InferenceChunk {
+            token: Some(Token {
+                id: 0,
+                text: "test".to_string(),
+                logprob: None,
+            }),
+            text: "test".to_string(),
+            finish_reason: Some(FinishReason::EndOfText),
+            index: 0,
+        };
+
+        assert!(chunk.token.is_some());
+        assert_eq!(chunk.finish_reason, Some(FinishReason::EndOfText));
+    }
+
+    #[test]
+    fn test_finish_reason_variants() {
+        assert_eq!(
+            FinishReason::MaxTokens,
+            FinishReason::MaxTokens
+        );
+        assert_ne!(
+            FinishReason::MaxTokens,
+            FinishReason::StopSequence
+        );
+    }
+
+    #[test]
+    fn test_message_role_variants() {
+        assert_eq!(MessageRole::User, MessageRole::User);
+        assert_ne!(MessageRole::User, MessageRole::Assistant);
+        assert_ne!(MessageRole::Assistant, MessageRole::System);
+    }
+
+    #[test]
+    fn test_model_spec_with_quantization() {
+        let mut spec = ModelSpec::new(
+            "quantized-model".to_string(),
+            PathBuf::from("model.gguf"),
+            "llama".to_string(),
+            "gguf".to_string(),
+        );
+
+        spec.quantization = Some("Q4_K_M".to_string());
+        spec.parameters = Some(7_000_000_000);
+        spec.device = DeviceKind::GPU { id: 0 };
+
+        assert_eq!(spec.quantization, Some("Q4_K_M".to_string()));
+        assert_eq!(spec.parameters, Some(7_000_000_000));
+        assert_eq!(spec.device, DeviceKind::GPU { id: 0 });
+    }
+
+    #[test]
+    fn test_sampling_params_custom() {
+        let params = SamplingParams {
+            max_tokens: 1024,
+            temperature: 0.9,
+            top_p: 0.95,
+            top_k: Some(50),
+            repetition_penalty: 1.2,
+            stop_sequences: vec!["\n\n".to_string(), "###".to_string()],
+        };
+
+        assert_eq!(params.max_tokens, 1024);
+        assert_eq!(params.top_k, Some(50));
+        assert_eq!(params.stop_sequences.len(), 2);
+    }
 }

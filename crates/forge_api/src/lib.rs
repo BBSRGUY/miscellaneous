@@ -8,7 +8,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response, Sse},
     routing::{get, post},
     Json, Router,
@@ -22,8 +22,8 @@ use std::convert::Infallible;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
-use tower_http::cors::CorsLayer;
-use tracing::{debug, info};
+use tower_http::cors::{Any, CorsLayer};
+use tracing::{debug, info, warn};
 
 pub use forge_engine;
 pub use forge_models;
@@ -82,6 +82,70 @@ impl IntoResponse for ApiError {
 }
 
 pub type ApiResult<T> = std::result::Result<T, ApiError>;
+
+// ============================================================================
+// Input Validation & Sanitization
+// ============================================================================
+
+/// Validate and sanitize user input strings to prevent injection attacks.
+fn validate_input(input: &str, field_name: &str, max_length: usize) -> ApiResult<()> {
+    // Check length
+    if input.is_empty() {
+        return Err(ApiError::BadRequest(format!("{} cannot be empty", field_name)));
+    }
+    if input.len() > max_length {
+        return Err(ApiError::BadRequest(format!(
+            "{} exceeds maximum length of {} characters",
+            field_name, max_length
+        )));
+    }
+
+    // Check for null bytes (security issue in many contexts)
+    if input.contains('\0') {
+        return Err(ApiError::BadRequest(format!(
+            "{} contains invalid null byte",
+            field_name
+        )));
+    }
+
+    Ok(())
+}
+
+/// Validate model ID format.
+fn validate_model_id(id: &str) -> ApiResult<()> {
+    validate_input(id, "Model ID", 256)?;
+
+    // Model IDs should be alphanumeric with hyphens and underscores
+    if !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err(ApiError::BadRequest(
+            "Model ID must contain only alphanumeric characters, hyphens, and underscores".to_string()
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validate file paths to prevent directory traversal attacks.
+fn validate_path(path: &str) -> ApiResult<()> {
+    validate_input(path, "Path", 4096)?;
+
+    // Check for directory traversal attempts
+    if path.contains("..") || path.contains("//") {
+        return Err(ApiError::BadRequest(
+            "Path contains invalid sequences".to_string()
+        ));
+    }
+
+    Ok(())
+}
+
+/// Sanitize string for logging to prevent log injection.
+fn sanitize_for_logging(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
+        .take(200) // Limit log entry length
+        .collect()
+}
 
 // ============================================================================
 // DTOs - Request/Response Types
@@ -325,7 +389,14 @@ async fn register_model_handler(
     State(runtime): State<Arc<Runtime>>,
     Json(dto): Json<RegisterModelDto>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    info!("Registering model: {}", dto.name);
+    // Validate inputs
+    validate_input(&dto.name, "Model name", 256)?;
+    validate_path(&dto.path)?;
+    validate_input(&dto.backend, "Backend", 64)?;
+    validate_input(&dto.format, "Format", 64)?;
+
+    // Sanitize for logging
+    info!("Registering model: {}", sanitize_for_logging(&dto.name));
 
     let format = dto.format.parse::<Format>()
         .map_err(|e| ApiError::BadRequest(e))?;
@@ -384,7 +455,16 @@ async fn chat_handler(
     State(runtime): State<Arc<Runtime>>,
     Json(dto): Json<ChatRequestDto>,
 ) -> ApiResult<Response> {
-    info!("Chat request for model: {}", dto.model_id);
+    // Validate inputs
+    validate_model_id(&dto.model_id)?;
+    validate_input(&dto.prompt, "Prompt", 32000)?;
+
+    if let Some(session_id) = &dto.session_id {
+        validate_input(session_id, "Session ID", 256)?;
+    }
+
+    // Sanitize for logging
+    info!("Chat request for model: {}", sanitize_for_logging(&dto.model_id));
 
     let priority = dto.priority
         .as_deref()
@@ -871,9 +951,21 @@ pub fn create_api_router(runtime: Arc<Runtime>) -> Router {
         .route("/rag/query", post(query_rag_handler))
         .with_state(runtime);
 
+    // Create CORS layer restricted to local origins for security
+    let cors = CorsLayer::new()
+        .allow_origin([
+            "http://localhost:3000".parse::<HeaderValue>().unwrap(),
+            "http://localhost:5173".parse::<HeaderValue>().unwrap(), // Vite dev server
+            "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
+            "http://127.0.0.1:5173".parse::<HeaderValue>().unwrap(),
+            "tauri://localhost".parse::<HeaderValue>().unwrap(), // Tauri app
+        ])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_headers(Any);
+
     Router::new()
         .nest(&format!("/api/{}", API_VERSION), v1_routes)
-        .layer(CorsLayer::permissive())
+        .layer(cors)
 }
 
 /// Run the HTTP server.

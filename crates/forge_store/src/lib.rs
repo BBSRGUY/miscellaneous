@@ -391,4 +391,230 @@ mod tests {
 
         store.close().await;
     }
+
+    #[tokio::test]
+    async fn test_document_crud() {
+        let store = Store::new_in_memory().await.unwrap();
+        let repo = store.documents();
+
+        // Create
+        let mut doc = Document::new("test-doc.txt".to_string());
+        doc.content = Some("This is a test document".to_string());
+        doc.path = Some("/path/to/doc.txt".to_string());
+
+        repo.create(&doc).await.unwrap();
+
+        // Read
+        let retrieved = repo.get(&doc.id).await.unwrap();
+        assert_eq!(retrieved.source, "test-doc.txt");
+        assert_eq!(retrieved.content, Some("This is a test document".to_string()));
+        assert!(retrieved.indexed_at.is_none());
+
+        // Mark as indexed
+        let mut updated = retrieved.clone();
+        updated.mark_indexed();
+        repo.update(&updated).await.unwrap();
+
+        let indexed = repo.get(&doc.id).await.unwrap();
+        assert!(indexed.indexed_at.is_some());
+
+        // List
+        let docs = repo.list().await.unwrap();
+        assert_eq!(docs.len(), 1);
+
+        // Delete
+        repo.delete(&doc.id).await.unwrap();
+        let result = repo.get(&doc.id).await;
+        assert!(result.is_err());
+
+        store.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_document_chunks_and_embeddings() {
+        let store = Store::new_in_memory().await.unwrap();
+
+        // Create a document
+        let doc = Document::new("rag-test.txt".to_string());
+        store.documents().create(&doc).await.unwrap();
+
+        // Create chunks with embeddings
+        let mut chunk1 = DocumentChunk::new(doc.id.clone(), 0, "First chunk".to_string());
+        chunk1.set_embedding(vec![0.1, 0.2, 0.3, 0.4]);
+        chunk1.token_count = Some(2);
+
+        let mut chunk2 = DocumentChunk::new(doc.id.clone(), 1, "Second chunk".to_string());
+        chunk2.set_embedding(vec![0.5, 0.6, 0.7, 0.8]);
+        chunk2.token_count = Some(2);
+
+        let chunk_repo = store.document_chunks();
+        chunk_repo.create(&chunk1).await.unwrap();
+        chunk_repo.create(&chunk2).await.unwrap();
+
+        // List chunks for document
+        let chunks = chunk_repo.list_by_document(&doc.id).await.unwrap();
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].chunk_index, 0);
+        assert_eq!(chunks[1].chunk_index, 1);
+
+        // Count chunks
+        let count = chunk_repo.count_by_document(&doc.id).await.unwrap();
+        assert_eq!(count, 2);
+
+        // Verify embeddings are stored and retrieved correctly
+        let retrieved_chunk = chunk_repo.get(&chunk1.id).await.unwrap();
+        let embedding = retrieved_chunk.get_embedding().unwrap();
+        assert_eq!(embedding, vec![0.1, 0.2, 0.3, 0.4]);
+
+        // Test cosine similarity
+        let similarity = chunk1.cosine_similarity(&chunk2).unwrap();
+        assert!(similarity > 0.0 && similarity <= 1.0);
+
+        // Test similarity search
+        let query_embedding = vec![0.2, 0.3, 0.4, 0.5];
+        let results = chunk_repo
+            .search_by_similarity(query_embedding, 2)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(results[0].1 >= results[1].1); // First result should have higher similarity
+
+        // Delete chunks
+        chunk_repo.delete_by_document(&doc.id).await.unwrap();
+        let chunks = chunk_repo.list_by_document(&doc.id).await.unwrap();
+        assert_eq!(chunks.len(), 0);
+
+        store.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_model_get_by_name() {
+        let store = Store::new_in_memory().await.unwrap();
+        let repo = store.models();
+
+        let model = Model::new(
+            "unique-model".to_string(),
+            "echo".to_string(),
+            "gguf".to_string(),
+        );
+        repo.create(&model).await.unwrap();
+
+        // Get by name
+        let retrieved = repo.get_by_name("unique-model").await.unwrap();
+        assert_eq!(retrieved.id, model.id);
+
+        // Test not found
+        let result = repo.get_by_name("non-existent").await;
+        assert!(result.is_err());
+
+        store.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_job_status_filtering() {
+        let store = Store::new_in_memory().await.unwrap();
+        let repo = store.jobs();
+
+        // Create jobs with different statuses
+        let mut job1 = Job::new("training".to_string());
+        job1.start();
+        repo.create(&job1).await.unwrap();
+
+        let mut job2 = Job::new("inference".to_string());
+        repo.create(&job2).await.unwrap();
+
+        let mut job3 = Job::new("training".to_string());
+        job3.start();
+        job3.complete();
+        repo.create(&job3).await.unwrap();
+
+        // List all jobs
+        let all_jobs = repo.list().await.unwrap();
+        assert_eq!(all_jobs.len(), 3);
+
+        // Filter by status
+        let running = repo.list_by_status("running").await.unwrap();
+        assert_eq!(running.len(), 1);
+
+        let queued = repo.list_by_status("queued").await.unwrap();
+        assert_eq!(queued.len(), 1);
+
+        let completed = repo.list_by_status("completed").await.unwrap();
+        assert_eq!(completed.len(), 1);
+
+        store.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_job_failure() {
+        let store = Store::new_in_memory().await.unwrap();
+        let repo = store.jobs();
+
+        let mut job = Job::new("training".to_string());
+        job.start();
+        repo.create(&job).await.unwrap();
+
+        // Fail the job
+        job.fail("Out of memory".to_string());
+        repo.update(&job).await.unwrap();
+
+        let retrieved = repo.get(&job.id).await.unwrap();
+        assert_eq!(retrieved.status, "failed");
+        assert_eq!(retrieved.error_message, Some("Out of memory".to_string()));
+        assert!(retrieved.completed_at.is_some());
+
+        store.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_session_list_ordering() {
+        let store = Store::new_in_memory().await.unwrap();
+        let repo = store.sessions();
+
+        // Create multiple sessions
+        let session1 = Session::new("First".to_string(), None);
+        let session2 = Session::new("Second".to_string(), None);
+        let session3 = Session::new("Third".to_string(), None);
+
+        repo.create(&session1).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        repo.create(&session2).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        repo.create(&session3).await.unwrap();
+
+        // List should be ordered by created_at DESC (newest first)
+        let sessions = repo.list().await.unwrap();
+        assert_eq!(sessions.len(), 3);
+        assert_eq!(sessions[0].name, "Third");
+        assert_eq!(sessions[2].name, "First");
+
+        store.close().await;
+    }
+
+    #[tokio::test]
+    async fn test_repository_not_found_errors() {
+        let store = Store::new_in_memory().await.unwrap();
+
+        // Test model not found
+        let result = store.models().get("non-existent-id").await;
+        assert!(matches!(result, Err(StoreError::NotFound(_))));
+
+        // Test session not found
+        let result = store.sessions().get("non-existent-id").await;
+        assert!(matches!(result, Err(StoreError::NotFound(_))));
+
+        // Test job not found
+        let result = store.jobs().get("non-existent-id").await;
+        assert!(matches!(result, Err(StoreError::NotFound(_))));
+
+        // Test document not found
+        let result = store.documents().get("non-existent-id").await;
+        assert!(matches!(result, Err(StoreError::NotFound(_))));
+
+        // Test document chunk not found
+        let result = store.document_chunks().get("non-existent-id").await;
+        assert!(matches!(result, Err(StoreError::NotFound(_))));
+
+        store.close().await;
+    }
 }
