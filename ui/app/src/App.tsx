@@ -4,10 +4,11 @@ import Terminal from './components/Terminal';
 import ChatPanel from './components/ChatPanel';
 import ModelsPanel from './components/ModelsPanel';
 import JobsPanel from './components/JobsPanel';
+import WebGPUPanel from './components/WebGPUPanel';
 import './App.css';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'chat' | 'models' | 'jobs'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'models' | 'jobs' | 'webgpu'>('chat');
   const [apiStatus, setApiStatus] = useState<'checking' | 'healthy' | 'error'>('checking');
   const [apiVersion, setApiVersion] = useState<string>('');
 
@@ -83,12 +84,19 @@ function App() {
             >
               Jobs
             </button>
+            <button
+              className={`tab ${activeTab === 'webgpu' ? 'active' : ''}`}
+              onClick={() => setActiveTab('webgpu')}
+            >
+              WebGPU
+            </button>
           </div>
 
           <div className="tab-content">
             {activeTab === 'chat' && <ChatPanel />}
             {activeTab === 'models' && <ModelsPanel />}
             {activeTab === 'jobs' && <JobsPanel />}
+            {activeTab === 'webgpu' && <WebGPUPanel />}
           </div>
         </div>
       </div>

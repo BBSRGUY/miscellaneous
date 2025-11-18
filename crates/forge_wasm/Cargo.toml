@@ -9,14 +9,31 @@ authors.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wasm-bindgen = { workspace = true }
-wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 wgpu = { workspace = true }
+bytemuck = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
 
+# WASM-specific dependencies
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+serde = { workspace = true, features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+tracing-wasm = "0.2"
+
+# Use forge_wgpu_core for GPU kernels
 forge_wgpu_core = { path = "../forge_wgpu_core" }
+
+# Web APIs - minimal features to avoid conflicts
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "Window",
+    "Navigator",
+    "console",
+]
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

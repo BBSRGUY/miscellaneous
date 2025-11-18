@@ -182,6 +182,20 @@ pub struct JobListItem {
     pub duration_ms: Option<u64>,
 }
 
+/// WebGPU client registration request.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WebGpuRegisterRequest {
+    pub adapter_info: Option<serde_json::Value>,
+    pub capabilities: Option<serde_json::Value>,
+}
+
+/// WebGPU client registration response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WebGpuRegisterResponse {
+    pub client_id: String,
+    pub message: String,
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -446,6 +460,40 @@ async fn get_job_handler(
     Ok(Json(item))
 }
 
+/// WebGPU client registration handler.
+#[tracing::instrument(skip(runtime))]
+async fn webgpu_register_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Json(request): Json<WebGpuRegisterRequest>,
+) -> ApiResult<Json<WebGpuRegisterResponse>> {
+    info!("WebGPU client registration request received");
+
+    // Generate a unique client ID
+    let client_id = format!("webgpu-client-{}", uuid::Uuid::new_v4());
+
+    // Log the registration
+    if let Some(adapter_info) = request.adapter_info {
+        debug!("WebGPU adapter info: {:?}", adapter_info);
+    }
+
+    if let Some(capabilities) = request.capabilities {
+        debug!("WebGPU capabilities: {:?}", capabilities);
+    }
+
+    // In a full implementation, we would:
+    // - Store the client registration in a database or registry
+    // - Track client capabilities for workload distribution
+    // - Set up a heartbeat mechanism
+    // For now, we just acknowledge the registration
+
+    info!("Registered WebGPU client: {}", client_id);
+
+    Ok(Json(WebGpuRegisterResponse {
+        client_id,
+        message: "WebGPU client registered successfully".to_string(),
+    }))
+}
+
 // ============================================================================
 // Router Setup
 // ============================================================================
@@ -461,6 +509,7 @@ pub fn create_api_router(runtime: Arc<Runtime>) -> Router {
         .route("/sessions/:id", get(get_session_handler))
         .route("/jobs", get(list_jobs_handler))
         .route("/jobs/:id", get(get_job_handler))
+        .route("/webgpu/register", post(webgpu_register_handler))
         .with_state(runtime);
 
     Router::new()

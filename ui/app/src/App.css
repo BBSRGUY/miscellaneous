@@ -720,3 +720,159 @@ tr:hover {
   text-align: center;
   border-top: 1px solid #3e3e42;
 }
+
+/* WebGPU Panel Styles */
+.webgpu-panel {
+  padding: 20px;
+}
+
+.webgpu-panel h2 {
+  margin-top: 0;
+  margin-bottom: 24px;
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.webgpu-panel h3 {
+  color: #cccccc;
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.status-card {
+  background-color: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.status-card.status-success {
+  border-left: 4px solid #89d185;
+}
+
+.status-card.status-error {
+  border-left: 4px solid #f14c4c;
+}
+
+.status-header {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #ffffff;
+}
+
+.adapter-info {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #d4d4d4;
+}
+
+.adapter-info p {
+  margin: 6px 0;
+}
+
+.adapter-info strong {
+  color: #cccccc;
+  display: inline-block;
+  min-width: 100px;
+}
+
+.error-message {
+  color: #f14c4c;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.result-output {
+  background-color: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 16px;
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.benchmark-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.benchmark-table thead {
+  background-color: #2d2d30;
+}
+
+.benchmark-table th {
+  padding: 12px;
+  text-align: left;
+  color: #cccccc;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.benchmark-table td {
+  padding: 10px 12px;
+  color: #d4d4d4;
+  font-size: 13px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.benchmark-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.benchmark-table tbody tr:hover {
+  background-color: #2a2a2e;
+}
+
+.instructions {
+  background-color: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.instructions ol {
+  margin: 0;
+  padding-left: 24px;
+  color: #d4d4d4;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.instructions li {
+  margin-bottom: 8px;
+}
+
+.info-box {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+}
+
+.info-box h4 {
+  margin: 0 0 8px 0;
+  color: #cccccc;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.info-box code {
+  display: block;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #89d185;
+}
