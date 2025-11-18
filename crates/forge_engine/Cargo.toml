@@ -17,6 +17,7 @@ futures = { workspace = true }
 bytes = { workspace = true }
 parking_lot = { workspace = true }
 uuid = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

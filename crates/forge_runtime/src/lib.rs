@@ -12,12 +12,14 @@ pub mod runtime;
 pub mod scheduler;
 pub mod sessions;
 pub mod tasks;
+pub mod training_jobs;
 
 // Re-export commonly used types
 pub use runtime::{ChatRequest, Runtime, RuntimeError};
 pub use scheduler::{Scheduler, SchedulerError};
 pub use sessions::{Message, MessageRole, Session, SessionError, SessionManager};
 pub use tasks::{JobStatus, Task, TaskPriority, TaskState, TaskType};
+pub use training_jobs::{TrainingJobError, TrainingJobManager};
 
 // Legacy in-memory implementations (kept for backward compatibility)
 mod legacy {

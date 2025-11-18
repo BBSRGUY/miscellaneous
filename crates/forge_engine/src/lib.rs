@@ -56,6 +56,7 @@
 pub mod backend;
 pub mod echo;
 pub mod engine;
+pub mod training;
 pub mod types;
 
 use thiserror::Error;
@@ -64,6 +65,7 @@ use thiserror::Error;
 pub use backend::{InferenceStream, ModelBackend, ModelInfo};
 pub use echo::EchoBackend;
 pub use engine::Engine;
+pub use training::{TrainConfig, TrainingJob, TrainingMetrics, TrainingMethod, TrainingState};
 pub use types::*;
 
 /// Errors that can occur during model inference or training.
