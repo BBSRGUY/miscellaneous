@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ganit-A | Mathematical Discovery Engine</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-animation">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <div class="logo-icon">𝐆</div>
+                <div class="logo-text">
+                    <h1>Ganit-A</h1>
+                    <p>Mathematical Discovery Engine</p>
+                </div>
+            </div>
+            <nav class="nav">
+                <button class="nav-btn active" onclick="showView('dashboard')">Dashboard</button>
+                <button class="nav-btn" onclick="showView('discoveries')">Discoveries</button>
+                <button class="nav-btn" onclick="showView('explorer')">Explorer</button>
+                <button class="nav-btn" onclick="showView('config')">Configuration</button>
+            </nav>
+            <div class="status-indicator">
+                <div class="status-dot" id="status-dot"></div>
+                <span id="status-text">Connected</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="view active">
+            <div class="container">
+                <div class="page-header">
+                    <h2>Discovery Dashboard</h2>
+                    <button class="btn-primary" onclick="startRun()">
+                        <span class="btn-icon">▶</span>
+                        Start New Run
+                    </button>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Total Discoveries</div>
+                            <div class="stat-value" id="stat-total">0</div>
+                        </div>
+                        <div class="stat-trend up">+12%</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">✓</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Certified</div>
+                            <div class="stat-value" id="stat-certified">0</div>
+                        </div>
+                        <div class="stat-trend up">+8%</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">🔍</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Recognized</div>
+                            <div class="stat-value" id="stat-recognized">0</div>
+                        </div>
+                        <div class="stat-trend up">+15%</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon">⚡</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Cross-Validated</div>
+                            <div class="stat-value" id="stat-validated">0</div>
+                        </div>
+                        <div class="stat-trend up">+20%</div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3>Discovery Distribution by Stage</h3>
+                        <canvas id="stageChart"></canvas>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>Discovery Timeline</h3>
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Discoveries -->
+                <div class="discoveries-section">
+                    <h3>Top Discoveries</h3>
+                    <div class="discoveries-list" id="top-discoveries">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Discoveries View -->
+        <div id="discoveries-view" class="view">
+            <div class="container">
+                <div class="page-header">
+                    <h2>All Discoveries</h2>
+                    <div class="filters">
+                        <select class="filter-select" id="stage-filter" onchange="filterDiscoveries()">
+                            <option value="">All Stages</option>
+                            <option value="observed">Observed</option>
+                            <option value="certified">Certified</option>
+                            <option value="recognized">Recognized</option>
+                            <option value="cross_validated">Cross-Validated</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="discoveries-grid" id="all-discoveries">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Explorer View -->
+        <div id="explorer-view" class="view">
+            <div class="container">
+                <div class="page-header">
+                    <h2>Interactive Explorer</h2>
+                </div>
+
+                <div class="explorer-layout">
+                    <div class="explorer-sidebar">
+                        <h3>Discovery Details</h3>
+                        <div id="explorer-details">
+                            <p class="placeholder">Select a discovery to view details</p>
+                        </div>
+                    </div>
+
+                    <div class="explorer-main">
+                        <div class="convergence-chart-card">
+                            <h3>Convergence Analysis</h3>
+                            <canvas id="convergenceChart"></canvas>
+                        </div>
+
+                        <div class="relation-display" id="relation-display">
+                            <!-- MathJax rendered relations -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration View -->
+        <div id="config-view" class="view">
+            <div class="container">
+                <div class="page-header">
+                    <h2>Run Configuration</h2>
+                </div>
+
+                <div class="config-form">
+                    <div class="form-section">
+                        <h3>General Settings</h3>
+                        <div class="form-group">
+                            <label>Target Precision (digits)</label>
+                            <input type="number" id="precision-input" value="600" min="100" max="10000">
+                        </div>
+                        <div class="form-group">
+                            <label>Time Limit (minutes)</label>
+                            <input type="number" id="time-limit-input" value="30" min="1" max="1440">
+                        </div>
+                        <div class="form-group">
+                            <label>Max Workers</label>
+                            <input type="number" id="workers-input" value="4" min="1" max="16">
+                        </div>
+                        <div class="form-group">
+                            <label>Random Seed</label>
+                            <input type="number" id="seed-input" value="42">
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Enabled Modules</h3>
+                        <div class="module-toggle">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="module-series" checked>
+                                <span class="toggle-slider"></span>
+                                Series & Products
+                            </label>
+                        </div>
+                        <div class="module-toggle">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="module-cf" checked>
+                                <span class="toggle-slider"></span>
+                                Continued Fractions
+                            </label>
+                        </div>
+                        <div class="module-toggle">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="module-fp" checked>
+                                <span class="toggle-slider"></span>
+                                Fixed Points
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Discovering mathematical constants...</p>
+    </div>
+
+    <!-- Notification Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

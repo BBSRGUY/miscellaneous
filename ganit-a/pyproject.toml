@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ganit-a"
+version = "1.0.0"
+description = "Advanced Mathematical Discovery Engine - Discover novel constants, patterns, and insights"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Ganit-A Team", email = "ganit-a@example.com"}
+]
+keywords = ["mathematics", "discovery", "constants", "pslq", "numerical-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "mpmath>=1.3.0",
+    "sympy>=1.12",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "pyyaml>=6.0",
+    "click>=8.1.0",
+    "rich>=13.7.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "jinja2>=3.1.2",
+    "aiosqlite>=0.19.0",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+
+[project.scripts]
+ganit-a = "ganita.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

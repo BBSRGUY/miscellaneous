@@ -1,0 +1,190 @@
+# Ganit-A Configuration File
+# Mathematical Discovery Engine Settings
+
+run:
+  # Target precision in decimal digits
+  target_precision_digits: 600
+
+  # Maximum wallclock time for entire run (minutes)
+  wallclock_limit_minutes: 120
+
+  # Random seed for reproducibility
+  random_seed: 42
+
+scheduler:
+  # Maximum parallel workers
+  max_workers: 8
+
+  # Per-module time budgets (minutes)
+  per_module_budget_minutes:
+    series_products: 40
+    continued_fractions: 40
+    fixed_points: 30
+
+evaluator:
+  # Library to use: mpmath (Python) or arb (C library via bindings)
+  library: mpmath
+
+  # Precision ramp (bits)
+  precision_ramp: [128, 256, 512, 1024, 2048]
+
+  # Stop when radius reaches this threshold
+  stop_radius: "1e-500"
+
+  # Maximum terms to evaluate
+  max_terms: 100000
+
+  # Safety checks
+  safeguards:
+    divergence_ratio_test: true
+    oscillation_check: true
+
+recognizer:
+  # Bases for PSLQ recognition
+  bases:
+    - name: small_v1
+      symbols:
+        - "1"
+        - "PI"
+        - "LOG2"
+        - "ZETA3"
+        - "CATALAN"
+        - "EULER_GAMMA"
+      max_height: 2000
+
+    - name: medium_v1
+      symbols:
+        - "1"
+        - "PI"
+        - "PI2"
+        - "LOG2"
+        - "LOG3"
+        - "LOG5"
+        - "ZETA3"
+        - "CATALAN"
+        - "EULER_GAMMA"
+        - "SQRT2"
+        - "SQRT3"
+        - "SQRT5"
+        - "PHI"
+      max_height: 10000
+
+    - name: extended_v1
+      symbols:
+        - "1"
+        - "PI"
+        - "PI2"
+        - "E"
+        - "LOG2"
+        - "LOG3"
+        - "ZETA3"
+        - "ZETA5"
+        - "CATALAN"
+        - "EULER_GAMMA"
+        - "SQRT2"
+        - "SQRT5"
+        - "PHI"
+        - "LI2_HALF"
+      max_height: 50000
+
+  # PSLQ precision levels to try (digits)
+  pslq_precision_digits: [200, 400, 800]
+
+ranking:
+  # Ranking weights (must sum to 1.0)
+  weights:
+    q1: 0.30  # Interval quality
+    q2: 0.15  # Convergence smoothness
+    q3: 0.20  # Recognition score
+    q4: 0.25  # Cross-validation
+    q5: 0.10  # Efficiency
+
+# Module configurations
+modules:
+  - name: series_products
+    enabled: true
+    budget_minutes: 40.0
+    max_terms: 100000
+    parameter_grid:
+      template:
+        - dirichlet
+        - polylog
+        - rational_series
+        - fibonacci_like
+      p:
+        type: range
+        start: 2
+        end: 6
+        step: 1
+      a:
+        type: range
+        start: 1
+        end: 4
+        step: 1
+      b:
+        type: range
+        start: 0
+        end: 3
+        step: 1
+      sign: [1, -1]
+
+  - name: continued_fractions
+    enabled: true
+    budget_minutes: 40.0
+    max_terms: 10000
+    parameter_grid:
+      template:
+        - simple
+        - linear
+        - quadratic
+      a0:
+        type: range
+        start: 0
+        end: 3
+        step: 1
+      a_coeff:
+        type: range
+        start: 1
+        end: 4
+        step: 1
+      b_coeff:
+        type: range
+        start: 1
+        end: 4
+        step: 1
+
+  - name: fixed_points
+    enabled: true
+    budget_minutes: 30.0
+    max_terms: 10000
+    parameter_grid:
+      template:
+        - cosine
+        - exponential
+        - nested_sqrt
+      scale: [0.5, 1.0, 2.0]
+      shift: [0.0, 1.0]
+      a:
+        type: range
+        start: 1
+        end: 4
+        step: 1
+
+# Neural components (optional, experimental)
+neural:
+  enabled: false
+  parameter_proposer:
+    model_path: null
+  candidate_ranker:
+    model_path: null
+
+# Logging
+logging:
+  level: INFO
+  file: ganita_run.log
+
+# Output
+output:
+  database_path: ganita_data/math_discovery.db
+  artifacts_path: ganita_data/artifacts
+  reports_path: reports
