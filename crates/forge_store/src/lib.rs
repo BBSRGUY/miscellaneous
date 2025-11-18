@@ -10,7 +10,10 @@ pub mod entities;
 pub mod repositories;
 
 use blob::BlobStorage;
-use repositories::{DocumentRepository, JobRepository, MessageRepository, ModelRepository, SessionRepository};
+use repositories::{
+    DocumentChunkRepository, DocumentRepository, JobRepository, MessageRepository, ModelRepository,
+    SessionRepository,
+};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use sqlx::ConnectOptions;
 use std::path::Path;
@@ -19,7 +22,7 @@ use thiserror::Error;
 use tracing::{debug, info, log::LevelFilter};
 
 pub use blob::BlobCategory;
-pub use entities::{Document, Job, Message, Model, Session};
+pub use entities::{Document, DocumentChunk, Job, Message, Model, Session};
 
 /// Errors that can occur during storage operations.
 #[derive(Debug, Error)]
@@ -161,6 +164,11 @@ impl Store {
     /// Get a document repository.
     pub fn documents(&self) -> DocumentRepository<'_> {
         DocumentRepository::new(&self.pool)
+    }
+
+    /// Get a document chunk repository.
+    pub fn document_chunks(&self) -> DocumentChunkRepository<'_> {
+        DocumentChunkRepository::new(&self.pool)
     }
 
     /// Close the store and release all connections.

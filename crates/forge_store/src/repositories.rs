@@ -2,7 +2,7 @@
 //!
 //! CRUD operations for database entities.
 
-use crate::entities::{Document, Job, Message, Model, Session};
+use crate::entities::{Document, DocumentChunk, Job, Message, Model, Session};
 use crate::{Result, StoreError};
 use chrono::Utc;
 use sqlx::SqlitePool;
@@ -424,6 +424,142 @@ impl<'a> DocumentRepository<'a> {
     /// Delete a document.
     pub async fn delete(&self, id: &str) -> Result<()> {
         sqlx::query("DELETE FROM documents WHERE id = ?")
+            .bind(id)
+            .execute(self.pool)
+            .await?;
+
+        Ok(())
+    }
+}
+
+/// Repository for DocumentChunk entities (RAG support).
+pub struct DocumentChunkRepository<'a> {
+    pool: &'a SqlitePool,
+}
+
+impl<'a> DocumentChunkRepository<'a> {
+    pub fn new(pool: &'a SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    /// Create a new document chunk.
+    pub async fn create(&self, chunk: &DocumentChunk) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO document_chunks (id, document_id, chunk_index, content, embedding, metadata, token_count, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&chunk.id)
+        .bind(&chunk.document_id)
+        .bind(chunk.chunk_index)
+        .bind(&chunk.content)
+        .bind(&chunk.embedding)
+        .bind(&chunk.metadata)
+        .bind(chunk.token_count)
+        .bind(&chunk.created_at)
+        .execute(self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get a chunk by ID.
+    pub async fn get(&self, id: &str) -> Result<DocumentChunk> {
+        let chunk = sqlx::query_as::<_, DocumentChunk>("SELECT * FROM document_chunks WHERE id = ?")
+            .bind(id)
+            .fetch_one(self.pool)
+            .await
+            .map_err(|_| StoreError::NotFound(format!("Document chunk with id {} not found", id)))?;
+
+        Ok(chunk)
+    }
+
+    /// List all chunks for a document.
+    pub async fn list_by_document(&self, document_id: &str) -> Result<Vec<DocumentChunk>> {
+        let chunks = sqlx::query_as::<_, DocumentChunk>(
+            "SELECT * FROM document_chunks WHERE document_id = ? ORDER BY chunk_index ASC",
+        )
+        .bind(document_id)
+        .fetch_all(self.pool)
+        .await?;
+
+        Ok(chunks)
+    }
+
+    /// Search for similar chunks using cosine similarity.
+    ///
+    /// This performs an in-memory similarity search. For large datasets,
+    /// consider using a dedicated vector database or approximate nearest neighbor index.
+    pub async fn search_by_similarity(
+        &self,
+        query_embedding: Vec<f32>,
+        limit: usize,
+    ) -> Result<Vec<(DocumentChunk, f32)>> {
+        // Fetch all chunks with embeddings
+        let chunks = sqlx::query_as::<_, DocumentChunk>(
+            "SELECT * FROM document_chunks WHERE embedding IS NOT NULL",
+        )
+        .fetch_all(self.pool)
+        .await?;
+
+        // Create a temporary chunk with the query embedding for similarity calculation
+        let mut query_chunk = DocumentChunk {
+            id: String::new(),
+            document_id: String::new(),
+            chunk_index: 0,
+            content: String::new(),
+            embedding: None,
+            metadata: None,
+            token_count: None,
+            created_at: String::new(),
+        };
+        query_chunk.set_embedding(query_embedding);
+
+        // Calculate similarities
+        let mut similarities: Vec<(DocumentChunk, f32)> = chunks
+            .into_iter()
+            .filter_map(|chunk| {
+                chunk
+                    .cosine_similarity(&query_chunk)
+                    .map(|similarity| (chunk, similarity))
+            })
+            .collect();
+
+        // Sort by similarity (highest first)
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Take top results
+        similarities.truncate(limit);
+
+        Ok(similarities)
+    }
+
+    /// Count chunks for a document.
+    pub async fn count_by_document(&self, document_id: &str) -> Result<i64> {
+        let result = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM document_chunks WHERE document_id = ?",
+        )
+        .bind(document_id)
+        .fetch_one(self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Delete all chunks for a document.
+    pub async fn delete_by_document(&self, document_id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM document_chunks WHERE document_id = ?")
+            .bind(document_id)
+            .execute(self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Delete a specific chunk.
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM document_chunks WHERE id = ?")
             .bind(id)
             .execute(self.pool)
             .await?;

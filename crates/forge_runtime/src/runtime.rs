@@ -2,13 +2,15 @@
 //!
 //! High-level runtime that coordinates store, models, engine, and scheduler.
 
+use crate::rag::RagService;
 use crate::scheduler::{Scheduler, SchedulerError};
 use crate::sessions::{MessageRole, SessionManager};
 use crate::tasks::{JobStatus, TaskPriority, TaskType};
 use crate::training_jobs::TrainingJobManager;
 use forge_engine::{Engine, InferenceRequest, InferenceStream, TrainBatch, TrainConfig};
 use forge_models::{ModelRegistry, RegisterModelRequest};
-use forge_store::Store;
+use forge_store::{Document, DocumentChunk, Store};
+use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info};
@@ -30,6 +32,9 @@ pub enum RuntimeError {
 
     #[error("Session error: {0}")]
     Session(#[from] crate::sessions::SessionError),
+
+    #[error("RAG error: {0}")]
+    Rag(#[from] crate::rag::RagError),
 
     #[error("Task not found: {0}")]
     TaskNotFound(String),
@@ -61,6 +66,7 @@ pub struct Runtime {
     sessions: Arc<SessionManager>,
     scheduler: Arc<Scheduler>,
     training_jobs: Arc<TrainingJobManager>,
+    rag: Arc<RagService>,
 }
 
 impl Runtime {
@@ -73,6 +79,7 @@ impl Runtime {
         let sessions = Arc::new(SessionManager::new(store.clone()));
         let scheduler = Arc::new(Scheduler::new());
         let training_jobs = Arc::new(TrainingJobManager::new());
+        let rag = Arc::new(RagService::new(store.clone(), engine.clone()));
 
         Self {
             store,
@@ -81,6 +88,7 @@ impl Runtime {
             sessions,
             scheduler,
             training_jobs,
+            rag,
         }
     }
 
@@ -318,7 +326,7 @@ impl Runtime {
     pub fn get_training_job(&self, job_id: &str) -> Result<forge_engine::TrainingJob> {
         self.training_jobs
             .get_job(job_id)
-            .map_err(|e| RuntimeError::TaskNotFound(job_id.to_string()))
+            .map_err(|_e| RuntimeError::TaskNotFound(job_id.to_string()))
     }
 
     /// List all training jobs.
@@ -353,7 +361,57 @@ impl Runtime {
     pub fn get_training_logs(&self, job_id: &str) -> Result<Vec<String>> {
         self.training_jobs
             .get_logs(job_id)
-            .map_err(|e| RuntimeError::TaskNotFound(job_id.to_string()))
+            .map_err(|_e| RuntimeError::TaskNotFound(job_id.to_string()))
+    }
+
+    // ========================================================================
+    // RAG Methods
+    // ========================================================================
+
+    /// Ingest a document from a file path.
+    pub async fn ingest_document(&self, file_path: &Path) -> Result<String> {
+        info!("Ingesting document: {}", file_path.display());
+        let document_id = self.rag.ingest_file(file_path).await?;
+        Ok(document_id)
+    }
+
+    /// List all documents in the RAG index.
+    pub async fn list_documents(&self) -> Result<Vec<Document>> {
+        Ok(self.rag.list_documents().await?)
+    }
+
+    /// Get a document by ID.
+    pub async fn get_document(&self, id: &str) -> Result<Document> {
+        Ok(self.rag.get_document(id).await?)
+    }
+
+    /// Get chunks for a document.
+    pub async fn get_document_chunks(&self, document_id: &str) -> Result<Vec<DocumentChunk>> {
+        Ok(self.rag.get_document_chunks(document_id).await?)
+    }
+
+    /// Delete a document and its chunks.
+    pub async fn delete_document(&self, id: &str) -> Result<()> {
+        self.rag.delete_document(id).await?;
+        Ok(())
+    }
+
+    /// Query RAG for relevant document chunks.
+    pub async fn query_rag(&self, query: &str, limit: usize) -> Result<Vec<(DocumentChunk, f32)>> {
+        Ok(self.rag.query(query, limit).await?)
+    }
+
+    /// Query RAG and format results as LLM context.
+    pub async fn query_rag_for_context(&self, query: &str, limit: usize) -> Result<String> {
+        Ok(self.rag.query_for_context(query, limit).await?)
+    }
+
+    /// Set the embedding model for RAG.
+    pub fn set_rag_embedding_model(&self, model_id: String) {
+        // Note: RagService is Arc'd, so we need interior mutability
+        // For now, this is a no-op. In production, we'd use RwLock or similar
+        info!("Setting RAG embedding model: {}", model_id);
+        // TODO: Implement interior mutability for RagService config
     }
 
     /// Shutdown the runtime.

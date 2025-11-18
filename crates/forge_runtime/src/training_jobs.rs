@@ -1,11 +1,12 @@
 //! Training job management.
 
-use forge_engine::training::{TrainConfig, Trainer, TrainingError, TrainingJob, TrainingState};
+use forge_engine::training::trainer::Trainer;
+use forge_engine::training::{TrainConfig, TrainingError, TrainingJob, TrainingState};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 /// Errors that can occur during training job management.
@@ -81,9 +82,14 @@ impl TrainingJobManager {
         let jobs = self.jobs.read();
         let job_ref = jobs
             .get(job_id)
-            .ok_or_else(|| TrainingJobError::JobNotFound(job_id.to_string()))?;
+            .ok_or_else(|| TrainingJobError::JobNotFound(job_id.to_string()))?
+            .clone();
 
-        Ok(job_ref.read().clone())
+        // Clone the job ref so we can release the lock before reading
+        drop(jobs);
+
+        let job = job_ref.read().clone();
+        Ok(job)
     }
 
     /// List all training jobs.
@@ -161,13 +167,14 @@ impl TrainingJobManager {
 
     /// Delete a training job.
     pub fn delete_job(&self, job_id: &str) -> Result<()> {
-        let job = {
+        let job_ref = {
             let jobs = self.jobs.read();
             jobs.get(job_id)
                 .ok_or_else(|| TrainingJobError::JobNotFound(job_id.to_string()))?
-                .read()
                 .clone()
         };
+
+        let job = job_ref.read().clone();
 
         // Only allow deletion of completed/failed/cancelled jobs
         if matches!(job.state, TrainingState::Running | TrainingState::Initializing) {

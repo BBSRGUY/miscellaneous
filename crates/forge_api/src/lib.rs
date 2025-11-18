@@ -225,6 +225,49 @@ pub struct TrainingJobResponse {
     pub completed_at: Option<String>,
 }
 
+/// RAG document ingestion request.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IngestDocumentRequest {
+    pub file_path: String,
+}
+
+/// RAG document response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DocumentResponse {
+    pub id: String,
+    pub source: String,
+    pub path: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub indexed_at: Option<String>,
+    pub chunk_count: Option<i64>,
+}
+
+/// RAG query request.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RagQueryRequest {
+    pub query: String,
+    pub limit: Option<usize>,
+    pub include_context: Option<bool>,
+}
+
+/// RAG query result (single chunk).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RagChunkResult {
+    pub chunk_id: String,
+    pub document_id: String,
+    pub content: String,
+    pub similarity: f32,
+    pub chunk_index: i32,
+}
+
+/// RAG query response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RagQueryResponse {
+    pub results: Vec<RagChunkResult>,
+    pub context: Option<String>,
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -532,14 +575,14 @@ async fn create_training_job_handler(
     info!("Creating training job for model: {}", request.base_model_id);
 
     // Convert request to TrainConfig
-    use forge_engine::{TrainConfig, TrainingMethod, LoRAConfig, OptimizerConfig, LRSchedulerConfig};
+    use forge_engine::training::{TrainConfig, TrainingMethod, LoRAConfig, OptimizerConfig, LRSchedulerConfig};
     use std::path::PathBuf;
 
     let method = match request.method.as_str() {
         "full" => TrainingMethod::FullFinetune,
         "lora" => TrainingMethod::LoRA,
         "qlora" => TrainingMethod::QLoRA,
-        _ => return Err(ApiError::InvalidRequest(format!("Invalid training method: {}", request.method))),
+        _ => return Err(ApiError::BadRequest(format!("Invalid training method: {}", request.method))),
     };
 
     let lora_config = if matches!(method, TrainingMethod::LoRA | TrainingMethod::QLoRA) {
@@ -646,14 +689,155 @@ async fn get_training_logs_handler(
     Ok(Json(logs))
 }
 
+// ============================================================================
+// RAG Handlers
+// ============================================================================
+
+/// Ingest a document.
+#[tracing::instrument(skip(runtime))]
+async fn ingest_document_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Json(request): Json<IngestDocumentRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    info!("Ingesting document: {}", request.file_path);
+
+    let file_path = PathBuf::from(&request.file_path);
+    if !file_path.exists() {
+        return Err(ApiError::BadRequest(format!(
+            "File not found: {}",
+            request.file_path
+        )));
+    }
+
+    let document_id = runtime.ingest_document(&file_path).await?;
+
+    Ok(Json(serde_json::json!({
+        "id": document_id,
+        "message": "Document ingested successfully"
+    })))
+}
+
+/// List all documents.
+#[tracing::instrument(skip(runtime))]
+async fn list_documents_handler(
+    State(runtime): State<Arc<Runtime>>,
+) -> ApiResult<Json<Vec<DocumentResponse>>> {
+    debug!("Listing documents");
+
+    let documents = runtime.list_documents().await?;
+
+    let mut responses = Vec::new();
+    for doc in documents {
+        let chunk_count = runtime
+            .store()
+            .document_chunks()
+            .count_by_document(&doc.id)
+            .await
+            .ok();
+
+        responses.push(DocumentResponse {
+            id: doc.id,
+            source: doc.source,
+            path: doc.path,
+            created_at: doc.created_at,
+            updated_at: doc.updated_at,
+            indexed_at: doc.indexed_at,
+            chunk_count,
+        });
+    }
+
+    Ok(Json(responses))
+}
+
+/// Get a document by ID.
+#[tracing::instrument(skip(runtime))]
+async fn get_document_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Path(doc_id): Path<String>,
+) -> ApiResult<Json<DocumentResponse>> {
+    debug!("Getting document: {}", doc_id);
+
+    let doc = runtime.get_document(&doc_id).await?;
+
+    let chunk_count = runtime
+        .store()
+        .document_chunks()
+        .count_by_document(&doc.id)
+        .await
+        .ok();
+
+    Ok(Json(DocumentResponse {
+        id: doc.id,
+        source: doc.source,
+        path: doc.path,
+        created_at: doc.created_at,
+        updated_at: doc.updated_at,
+        indexed_at: doc.indexed_at,
+        chunk_count,
+    }))
+}
+
+/// Delete a document.
+#[tracing::instrument(skip(runtime))]
+async fn delete_document_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Path(doc_id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    info!("Deleting document: {}", doc_id);
+
+    runtime.delete_document(&doc_id).await?;
+
+    Ok(Json(serde_json::json!({
+        "message": "Document deleted successfully",
+        "id": doc_id
+    })))
+}
+
+/// Query RAG for relevant chunks.
+#[tracing::instrument(skip(runtime))]
+async fn query_rag_handler(
+    State(runtime): State<Arc<Runtime>>,
+    Json(request): Json<RagQueryRequest>,
+) -> ApiResult<Json<RagQueryResponse>> {
+    info!("RAG query: {}", request.query);
+
+    let limit = request.limit.unwrap_or(5);
+    let include_context = request.include_context.unwrap_or(false);
+
+    let results = runtime.query_rag(&request.query, limit).await?;
+
+    let chunks: Vec<RagChunkResult> = results
+        .iter()
+        .map(|(chunk, similarity)| RagChunkResult {
+            chunk_id: chunk.id.clone(),
+            document_id: chunk.document_id.clone(),
+            content: chunk.content.clone(),
+            similarity: *similarity,
+            chunk_index: chunk.chunk_index,
+        })
+        .collect();
+
+    let context = if include_context {
+        Some(runtime.query_rag_for_context(&request.query, limit).await?)
+    } else {
+        None
+    };
+
+    Ok(Json(RagQueryResponse {
+        results: chunks,
+        context,
+    }))
+}
+
 /// Helper to convert TrainingJob to TrainingJobResponse.
 fn training_job_to_response(job: forge_engine::TrainingJob) -> TrainingJobResponse {
+    let progress = job.progress();
     TrainingJobResponse {
         id: job.id,
         state: format!("{:?}", job.state),
         current_step: job.current_step,
         total_steps: job.total_steps,
-        progress: job.progress(),
+        progress,
         latest_metrics: job.latest_metrics.map(|m| serde_json::to_value(m).unwrap()),
         error: job.error,
         created_at: job.created_at.to_rfc3339(),
@@ -682,6 +866,9 @@ pub fn create_api_router(runtime: Arc<Runtime>) -> Router {
         .route("/train/jobs/:id", get(get_training_job_handler))
         .route("/train/jobs/:id/cancel", post(cancel_training_job_handler))
         .route("/train/jobs/:id/logs", get(get_training_logs_handler))
+        .route("/rag/documents", post(ingest_document_handler).get(list_documents_handler))
+        .route("/rag/documents/:id", get(get_document_handler).delete(delete_document_handler))
+        .route("/rag/query", post(query_rag_handler))
         .with_state(runtime);
 
     Router::new()

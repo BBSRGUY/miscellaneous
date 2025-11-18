@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod logging;
+pub mod rag;
 pub mod runtime;
 pub mod scheduler;
 pub mod sessions;
@@ -15,6 +16,7 @@ pub mod tasks;
 pub mod training_jobs;
 
 // Re-export commonly used types
+pub use rag::{ChunkConfig, RagError, RagService, TextChunker};
 pub use runtime::{ChatRequest, Runtime, RuntimeError};
 pub use scheduler::{Scheduler, SchedulerError};
 pub use sessions::{Message, MessageRole, Session, SessionError, SessionManager};

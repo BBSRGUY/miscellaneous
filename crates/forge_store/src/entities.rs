@@ -199,3 +199,68 @@ impl Document {
         self.updated_at = Utc::now().to_rfc3339();
     }
 }
+
+/// Document chunk entity for RAG vector storage.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct DocumentChunk {
+    pub id: String,
+    pub document_id: String,
+    pub chunk_index: i32,
+    pub content: String,
+    pub embedding: Option<Vec<u8>>, // BLOB storage for vector embeddings
+    pub metadata: Option<String>, // JSON metadata
+    pub token_count: Option<i32>,
+    pub created_at: String,
+}
+
+impl DocumentChunk {
+    /// Create a new document chunk.
+    pub fn new(document_id: String, chunk_index: i32, content: String) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            document_id,
+            chunk_index,
+            content,
+            embedding: None,
+            metadata: None,
+            token_count: None,
+            created_at: Utc::now().to_rfc3339(),
+        }
+    }
+
+    /// Set the embedding vector.
+    pub fn set_embedding(&mut self, embedding: Vec<f32>) {
+        // Convert f32 vector to bytes
+        self.embedding = Some(embedding.iter().flat_map(|f| f.to_le_bytes()).collect());
+    }
+
+    /// Get the embedding as f32 vector.
+    pub fn get_embedding(&self) -> Option<Vec<f32>> {
+        self.embedding.as_ref().map(|bytes| {
+            bytes
+                .chunks_exact(4)
+                .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                .collect()
+        })
+    }
+
+    /// Calculate cosine similarity with another chunk.
+    pub fn cosine_similarity(&self, other: &DocumentChunk) -> Option<f32> {
+        let a = self.get_embedding()?;
+        let b = other.get_embedding()?;
+
+        if a.len() != b.len() {
+            return None;
+        }
+
+        let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return None;
+        }
+
+        Some(dot_product / (norm_a * norm_b))
+    }
+}
