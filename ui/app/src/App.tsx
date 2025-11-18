@@ -1,15 +1,10 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import * as api from './api/client';
 import Terminal from './components/Terminal';
 import ChatPanel from './components/ChatPanel';
 import ModelsPanel from './components/ModelsPanel';
 import JobsPanel from './components/JobsPanel';
 import './App.css';
-
-interface HealthResponse {
-  status: string;
-  version: string;
-}
 
 function App() {
   const [activeTab, setActiveTab] = useState<'chat' | 'models' | 'jobs'>('chat');
@@ -26,23 +21,12 @@ function App() {
 
   const checkHealth = async () => {
     try {
-      const health = await invoke<HealthResponse>('check_api_health');
+      const health = await api.checkHealth();
       setApiStatus('healthy');
       setApiVersion(health.version);
     } catch (error) {
       console.error('API health check failed:', error);
       setApiStatus('error');
-    }
-  };
-
-  const startDaemon = async () => {
-    try {
-      const result = await invoke<string>('start_daemon');
-      console.log(result);
-      // Wait a bit then check health
-      setTimeout(checkHealth, 2000);
-    } catch (error) {
-      console.error('Failed to start daemon:', error);
     }
   };
 
@@ -61,9 +45,9 @@ function App() {
         </div>
         <div className="nav-right">
           {apiStatus === 'error' && (
-            <button className="btn-start-daemon" onClick={startDaemon}>
-              Start Daemon
-            </button>
+            <div className="error-hint">
+              <span>Start the daemon: <code>forge serve</code></span>
+            </div>
           )}
         </div>
       </nav>
