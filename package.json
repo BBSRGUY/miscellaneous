@@ -1,0 +1,29 @@
+{
+  "name": "vid-player",
+  "version": "1.0.0",
+  "description": "Creative terminal-based video player with multiple rendering modes",
+  "main": "src/index.js",
+  "bin": {
+    "vid-player": "./src/cli.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node src/cli.js test-video.mp4"
+  },
+  "keywords": [
+    "video",
+    "terminal",
+    "cli",
+    "ascii",
+    "matrix"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "fluent-ffmpeg": "^2.1.2",
+    "jimp": "^0.22.10",
+    "yargs": "^17.7.2"
+  }
+}
