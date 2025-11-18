@@ -7,7 +7,7 @@ import { Save, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Header() {
-  const { getCurrentDiagram, updateDiagramType, markSaved } = useDiagramStore();
+  const { getCurrentDiagram, updateDiagramType, markSaved, isDirty } = useDiagramStore();
   const currentDiagram = getCurrentDiagram();
   const [darkMode, setDarkMode] = useState(false);
 
@@ -16,7 +16,7 @@ export default function Header() {
   const handleSave = async () => {
     if (currentDiagram) {
       // TODO: API call to save diagram
-      markSaved(currentDiagram.id);
+      markSaved();
       console.log('Diagram saved:', currentDiagram);
     }
   };
@@ -61,13 +61,13 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        {currentDiagram?.isDirty && (
+        {isDirty && (
           <span className="text-xs text-muted-foreground">Unsaved changes</span>
         )}
 
         <button
           onClick={handleSave}
-          disabled={!currentDiagram?.isDirty}
+          disabled={!isDirty}
           className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           <Save size={16} />

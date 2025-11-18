@@ -10,12 +10,13 @@ A comprehensive, modern IDE for creating and editing Mermaid diagrams with AI as
 - **AI Assistant**: Chat interface for diagram generation and modification
 
 ### 📊 Comprehensive Diagram Support
-Supports all major Mermaid diagram types:
+Supports 22 Mermaid diagram types:
 - Flowchart, Sequence, Class, State, ER diagrams
-- Gantt, User Journey, Timeline diagrams
-- Pie, Quadrant, XY Chart, Radar charts
+- Gantt, Journey, Timeline diagrams
+- Pie, QuadrantChart, XYChart, Radar charts
 - C4, GitGraph, Mindmap, Kanban boards
 - Architecture, Block, Packet, Sankey, Treemap diagrams
+- Requirement diagrams
 
 ### 🤖 AI Integration (Coming Soon)
 - Generate diagrams from natural language descriptions

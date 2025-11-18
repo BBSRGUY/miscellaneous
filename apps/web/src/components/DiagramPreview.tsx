@@ -6,7 +6,7 @@ import mermaid from 'mermaid';
 import { Download, ZoomIn, ZoomOut, RefreshCw } from 'lucide-react';
 
 export default function DiagramPreview() {
-  const { getCurrentDiagram } = useDiagramStore();
+  const { getCurrentDiagram, mermaidConfig } = useDiagramStore();
   const currentDiagram = getCurrentDiagram();
   const [svg, setSvg] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -14,14 +14,12 @@ export default function DiagramPreview() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (currentDiagram) {
-      mermaid.initialize({
-        ...currentDiagram.mermaidConfig,
-        startOnLoad: false,
-        securityLevel: 'loose',
-      });
-    }
-  }, [currentDiagram?.mermaidConfig]);
+    mermaid.initialize({
+      ...mermaidConfig,
+      startOnLoad: false,
+      securityLevel: 'loose',
+    });
+  }, [mermaidConfig]);
 
   useEffect(() => {
     const renderDiagram = async () => {

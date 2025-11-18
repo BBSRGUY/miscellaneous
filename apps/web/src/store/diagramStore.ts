@@ -8,21 +8,23 @@ export interface Diagram {
   title: string;
   diagramType: DiagramType;
   mermaidCode: string;
-  mermaidConfig: MermaidConfig;
-  isDirty?: boolean;
 }
 
-interface DiagramStore {
+interface DiagramState {
   currentProjectId?: string;
   currentDiagramId?: string;
   diagrams: Record<string, Diagram>;
+  mermaidConfig: MermaidConfig;
+  isDirty: boolean;
+}
 
+interface DiagramStore extends DiagramState {
   setCurrentDiagram: (id: string) => void;
   createDiagram: (diagram: Diagram) => void;
   updateCode: (id: string, code: string) => void;
-  updateConfig: (id: string, config: Partial<MermaidConfig>) => void;
+  updateConfig: (config: Partial<MermaidConfig>) => void;
   updateDiagramType: (id: string, type: DiagramType) => void;
-  markSaved: (id: string) => void;
+  markSaved: () => void;
   getCurrentDiagram: () => Diagram | undefined;
 }
 
@@ -44,10 +46,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       title: 'Sample Flowchart',
       diagramType: 'flowchart',
       mermaidCode: SAMPLE_FLOWCHART,
-      mermaidConfig: getDefaultConfig(),
-      isDirty: false,
     },
   },
+  mermaidConfig: getDefaultConfig(),
+  isDirty: false,
 
   setCurrentDiagram: (id) => set({ currentDiagramId: id }),
 
@@ -67,24 +69,18 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         [id]: {
           ...state.diagrams[id],
           mermaidCode: code,
-          isDirty: true,
         },
       },
+      isDirty: true,
     })),
 
-  updateConfig: (id, config) =>
+  updateConfig: (config) =>
     set((state) => ({
-      diagrams: {
-        ...state.diagrams,
-        [id]: {
-          ...state.diagrams[id],
-          mermaidConfig: {
-            ...state.diagrams[id].mermaidConfig,
-            ...config,
-          },
-          isDirty: true,
-        },
+      mermaidConfig: {
+        ...state.mermaidConfig,
+        ...config,
       },
+      isDirty: true,
     })),
 
   updateDiagramType: (id, type) =>
@@ -94,21 +90,12 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         [id]: {
           ...state.diagrams[id],
           diagramType: type,
-          isDirty: true,
         },
       },
+      isDirty: true,
     })),
 
-  markSaved: (id) =>
-    set((state) => ({
-      diagrams: {
-        ...state.diagrams,
-        [id]: {
-          ...state.diagrams[id],
-          isDirty: false,
-        },
-      },
-    })),
+  markSaved: () => set({ isDirty: false }),
 
   getCurrentDiagram: () => {
     const state = get();

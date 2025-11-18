@@ -158,24 +158,23 @@ export const getDefaultConfigForType = (type: DiagramType): Partial<MermaidConfi
     class: { class: baseConfig.class },
     state: { state: baseConfig.state },
     er: { er: baseConfig.er },
-    'user-journey': { journey: baseConfig.journey },
+    journey: { journey: baseConfig.journey },
     gantt: { gantt: baseConfig.gantt },
     pie: { pie: baseConfig.pie },
-    quadrant: { quadrantChart: baseConfig.quadrantChart },
-    requirement: { requirement: baseConfig.requirement },
-    gitgraph: { gitGraph: baseConfig.gitGraph },
+    quadrantChart: { quadrantChart: baseConfig.quadrantChart },
+    gitGraph: { gitGraph: baseConfig.gitGraph },
     c4: { c4: baseConfig.c4 },
     mindmap: { mindmap: baseConfig.mindmap },
     timeline: { timeline: baseConfig.timeline },
-    zenuml: { sequence: baseConfig.sequence }, // ZenUML uses sequence config
     sankey: { sankey: baseConfig.sankey },
-    'xy-chart': { xyChart: baseConfig.xyChart },
+    xyChart: { xyChart: baseConfig.xyChart },
     block: { block: baseConfig.block },
     packet: { packet: baseConfig.packet },
     kanban: { kanban: baseConfig.kanban },
     architecture: { architecture: baseConfig.architecture },
     radar: { radar: baseConfig.radar },
     treemap: {}, // Treemap doesn't have specific config yet
+    requirement: { requirement: baseConfig.requirement },
   };
 
   return {
